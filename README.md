@@ -18,16 +18,16 @@ CodexCTL te muestra todo en una tabla: el porcentaje usado, el disponible, y cu�
 
 ```
 ID       Cuenta       Email                    Plan     5h%  Disp.  7d%  Disp.  Reinicio
-team-1   Cuenta 1     ignacio@innobyte.cl      team     —    —      90%  10%    mié 05 ago 14:29
-free-1   Cuenta 4     ignacio@innobyte.cl      free     100% 0%     —    —      jue 27 ago 19:22
+team-1   Cuenta 1     hexarevenant@gmail.com      team     —    —      90%  10%    mié 05 ago 14:29
+free-1   Cuenta 4     hexarevenant@gmail.com      free     100% 0%     —    —      jue 27 ago 19:22
 ```
 
 ## Características
 
 ```
 ID       Cuenta       Email                    Plan     5h%  Disp.  7d%  Disp.  Reinicio
-team-1   Cuenta 1     ignacio@innobyte.cl      team     —    —      90%  10%    mié 05 ago 14:29
-free-1   Cuenta 4     ignacio@innobyte.cl      free     100% 0%     —    —      jue 27 ago 19:22
+team-1   Cuenta 1     hexarevenant@gmail.com      team     —    —      90%  10%    mié 05 ago 14:29
+free-1   Cuenta 4     hexarevenant@gmail.com      free     100% 0%     —    —      jue 27 ago 19:22
 ```
 
 ## Características
