@@ -114,8 +114,23 @@ async function invoke(cmd, args) {
   catch(e) { throw new Error(typeof e === 'string' ? e : e.message || String(e)); }
 }
 
+// ── Auto-refresh cada 5 minutos ────────────────────────────────
+const AUTO_REFRESH_MIN = 5;
+let autoTimer;
+
+function startAutoRefresh() {
+  clearInterval(autoTimer);
+  autoTimer = setInterval(() => {
+    refreshAll();
+    showToast(`🔄 Auto-actualizado (cada ${AUTO_REFRESH_MIN} min)`);
+  }, AUTO_REFRESH_MIN * 60 * 1000);
+}
+
 // ── Init ────────────────────────────────────────────────────────
-window.addEventListener("DOMContentLoaded", () => refreshAll());
+window.addEventListener("DOMContentLoaded", () => {
+  refreshAll();
+  startAutoRefresh();
+});
 
 async function refreshAll() {
   document.getElementById("loading").style.display = "";
