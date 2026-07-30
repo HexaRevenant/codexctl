@@ -8,7 +8,9 @@ struct AccountInfo {
     plan_type: String,
     is_active: bool,
     quota_5h: String,
+    disp_5h: String,
     quota_7d: String,
+    disp_7d: String,
     reset_at: String,
 }
 
@@ -20,15 +22,15 @@ async fn list_accounts(fetch_quota: bool) -> Result<Vec<AccountInfo>, String> {
     let mut result = Vec::new();
     for acct in &accounts {
         let is_active = active.as_ref().map(|a| a.id == acct.id).unwrap_or(false);
-        let (p5, p7, reset) = if fetch_quota {
+        let (p5, d5, p7, d7, reset) = if fetch_quota {
             let auth_path = codexctl::manager::homes_dir().join(&acct.uuid).join("auth.json");
             if let Some(q) = quota_for_account(&client, &auth_path).await {
                 q
             } else {
-                ("—".into(), "—".into(), "—".into())
+                ("—".into(), "—".into(), "—".into(), "—".into(), "—".into())
             }
         } else {
-            ("—".into(), "—".into(), "—".into())
+            ("—".into(), "—".into(), "—".into(), "—".into(), "—".into())
         };
         result.push(AccountInfo {
             id: acct.id.clone(),
@@ -37,7 +39,9 @@ async fn list_accounts(fetch_quota: bool) -> Result<Vec<AccountInfo>, String> {
             plan_type: acct.plan_type.clone().unwrap_or_default(),
             is_active,
             quota_5h: p5,
+            disp_5h: d5,
             quota_7d: p7,
+            disp_7d: d7,
             reset_at: reset,
         });
     }
@@ -80,7 +84,7 @@ async fn add_account(nickname: String) -> Result<String, String> {
     Ok(format!("✅ Agregada: \"{}\" (ID: {})", acct.nickname, acct.id))
 }
 
-async fn quota_for_account(client: &reqwest::Client, auth_path: &std::path::Path) -> Option<(String, String, String)> {
+async fn quota_for_account(client: &reqwest::Client, auth_path: &std::path::Path) -> Option<(String, String, String, String, String)> {
     if !auth_path.exists() { return None; }
     let creds = codexctl::auth::load(auth_path).ok()?;
     let creds = match codexctl::api::maybe_refresh(client, &creds).await.ok()? {
@@ -89,12 +93,14 @@ async fn quota_for_account(client: &reqwest::Client, auth_path: &std::path::Path
     };
     let snap = codexctl::api::fetch_quota(client, &creds).await.ok()?;
     let p5 = snap.primary_window.as_ref().map(|w| format!("{:.0}%", w.used_percent)).unwrap_or_else(|| "—".into());
+    let d5 = snap.primary_window.as_ref().map(|w| format!("{:.0}%", (100.0 - w.used_percent).max(0.0))).unwrap_or_else(|| "—".into());
     let p7 = snap.secondary_window.as_ref().map(|w| format!("{:.0}%", w.used_percent)).unwrap_or_else(|| "—".into());
+    let d7 = snap.secondary_window.as_ref().map(|w| format!("{:.0}%", (100.0 - w.used_percent).max(0.0))).unwrap_or_else(|| "—".into());
     let reset = snap.secondary_window.as_ref().or(snap.primary_window.as_ref())
         .and_then(|w| w.reset_at)
         .map(|dt| dt.with_timezone(&chrono::Local).format("%a %d %b %H:%M").to_string())
         .unwrap_or_else(|| "—".into());
-    Some((p5, p7, reset))
+    Some((p5, d5, p7, d7, reset))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

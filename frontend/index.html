@@ -76,7 +76,7 @@
 <div id="loading" class="loading">Cargando...</div>
 <table id="accountsTable" style="display:none">
   <thead><tr>
-    <th>Cuenta</th><th>Email</th><th>Plan</th><th>5h</th><th>7d</th><th>Reinicio</th><th></th>
+    <th>Cuenta</th><th>Email</th><th>Plan</th><th>5h%</th><th>Disp.</th><th>7d%</th><th>Disp.</th><th>Reinicio</th><th></th>
   </tr></thead>
   <tbody id="tbody"></tbody>
 </table>
@@ -183,7 +183,9 @@ function renderTable(accounts, status) {
       <td style="color:var(--text2)">${esc(a.email)}</td>
       <td><span class="tag tag-${a.plan_type}">${esc(a.plan_type)}</span></td>
       <td class="${q5}">${esc(a.quota_5h)}</td>
+      <td class="${q5}">${esc(a.disp_5h)}</td>
       <td class="${q7}">${esc(a.quota_7d)}</td>
+      <td class="${q7}">${esc(a.disp_7d)}</td>
       <td style="color:var(--text2);font-size:0.85em">${esc(a.reset_at)}</td>
       <td class="actions">
         <button onclick="switchAccount('${a.id}')">Activar</button>

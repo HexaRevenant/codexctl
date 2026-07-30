@@ -257,8 +257,8 @@ fn print_accounts(
 
     let active_id = active.map(|a| a.id.as_str());
 
-    let hdr = row(&["ID", "Cuenta", "Email", "Plan", "5h", "7d", "Reinicio", "Activa"]);
-    let sep = row(&["-", "-", "-", "-", "-", "-", "-", "-"]);
+    let hdr = row(&["ID", "Cuenta", "Email", "Plan", "5h%", "Disp.5h", "7d%", "Disp.7d", "Reinicio", "Activa"]);
+    let sep = row(&["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
     println!("{hdr}");
     println!("{sep}");
 
@@ -279,18 +279,15 @@ fn print_accounts(
 fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, is_active: bool) -> String {
     match snap {
         None => row(&[
-            &acct.id,
-            &acct.nickname,
+            &acct.id, &acct.nickname,
             acct.email.as_deref().unwrap_or("?"),
             acct.plan_type.as_deref().unwrap_or("?"),
-            "—",
-            "—",
-            "—",
+            "—", "—", "—", "—", "—",
             if is_active { "✅" } else { "" },
         ]),
         Some(s) => {
-            let p5 = format_pct(&s.primary_window);
-            let p7 = format_pct(&s.secondary_window);
+            let (p5, d5) = format_quota(&s.primary_window);
+            let (p7, d7) = format_quota(&s.secondary_window);
             let reset = s
                 .secondary_window
                 .as_ref()
@@ -299,21 +296,17 @@ fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, is_active: bool) ->
             let reset_str = format_fecha(reset);
             let act = if is_active { "✅" } else { "" };
             row(&[
-                &acct.id,
-                &acct.nickname,
+                &acct.id, &acct.nickname,
                 s.email.as_deref().or(acct.email.as_deref()).unwrap_or("?"),
                 s.plan_type.as_deref().or(acct.plan_type.as_deref()).unwrap_or("?"),
-                &p5,
-                &p7,
-                &reset_str,
-                act,
+                &p5, &d5, &p7, &d7, &reset_str, act,
             ])
         }
     }
 }
 
 fn row(cols: &[&str]) -> String {
-    let widths = [8usize, 20, 34, 8, 8, 8, 20, 7];
+    let widths = [8usize, 20, 34, 8, 8, 8, 8, 8, 20, 7];
     cols.iter()
         .enumerate()
         .map(|(i, c)| {
@@ -328,10 +321,14 @@ fn row(cols: &[&str]) -> String {
         .join(" ")
 }
 
-fn format_pct(w: &Option<UsageWindow>) -> String {
+fn format_quota(w: &Option<UsageWindow>) -> (String, String) {
     match w {
-        Some(w) => format!("{:.0}%", w.used_percent),
-        None => "—".to_string(),
+        Some(w) => {
+            let used = format!("{:.0}%", w.used_percent);
+            let avail = format!("{:.0}%", (100.0 - w.used_percent).max(0.0));
+            (used, avail)
+        }
+        None => ("—".to_string(), "—".to_string()),
     }
 }
 
