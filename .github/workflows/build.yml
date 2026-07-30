@@ -20,6 +20,10 @@ jobs:
             target: aarch64-apple-darwin
             pkg-config: ""
             rustflags: ""
+          - platform: macos-13
+            target: x86_64-apple-darwin
+            pkg-config: ""
+            rustflags: ""
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             pkg-config: ""
