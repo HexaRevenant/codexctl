@@ -14,13 +14,16 @@ jobs:
         include:
           - platform: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            args: ""
+            pkg-config: /usr/lib/x86_64-linux-gnu/pkgconfig
+            rustflags: "-L /usr/lib/x86_64-linux-gnu -C link-arg=-Wl,--disable-new-dtags -C link-arg=-Wl,-rpath,/usr/lib/x86_64-linux-gnu"
           - platform: macos-latest
             target: aarch64-apple-darwin
-            args: ""
+            pkg-config: ""
+            rustflags: ""
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
-            args: ""
+            pkg-config: ""
+            rustflags: ""
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -30,11 +33,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      - name: Setup Node (for Tauri frontend)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
 
       - name: Install Linux deps
         if: matrix.platform == 'ubuntu-latest'
@@ -48,12 +46,18 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
-      - name: Build
+      - name: Build (Linux)
+        if: matrix.platform == 'ubuntu-latest'
         run: cargo tauri build
         working-directory: ${{ github.workspace }}
         env:
-          PKG_CONFIG_PATH: /usr/lib/x86_64-linux-gnu/pkgconfig
-          RUSTFLAGS: "-L /usr/lib/x86_64-linux-gnu -C link-arg=-Wl,--disable-new-dtags -C link-arg=-Wl,-rpath,/usr/lib/x86_64-linux-gnu"
+          PKG_CONFIG_PATH: ${{ matrix.pkg-config }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
+
+      - name: Build (macOS / Windows)
+        if: matrix.platform != 'ubuntu-latest'
+        run: cargo tauri build
+        working-directory: ${{ github.workspace }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -62,3 +66,23 @@ jobs:
           path: |
             src-tauri/target/release/bundle/
           if-no-files-found: warn
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: codexctl-*
+          merge-multiple: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/*.deb
+            **/*.rpm
+            **/*.AppImage
+            **/*.dmg
+            **/*.msi
+            **/codexctl
