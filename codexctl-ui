@@ -1,0 +1,4 @@
+#!/bin/bash
+# Launch CodexCTL Tauri Desktop App
+export PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
+exec /home/hexa/codexctl-rs/src-tauri/target/release/codexctl-tauri "$@"
