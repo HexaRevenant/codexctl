@@ -6,7 +6,23 @@
 
 <p align="center"><strong>Multi-account quota tracker for OpenAI Codex — Rust + Tauri</strong></p>
 
-Gestión de múltiples cuentas de OpenAI Codex desde Linux, macOS y Windows. Consulta la cuota en vivo de cada cuenta, cambia entre ellas al instante, y lleva el control de tus límites de uso.
+## ¿Para qué sirve?
+
+Si tenés **varias cuentas de OpenAI Codex** (Plus, Team, Free) y querés:
+- Ver cuánta quota te queda en **cada una** sin tener que switchear manualmente
+- Saber cuál tiene **disponible** para seguir trabajando
+- Cambiar de cuenta **al instante** con un solo comando
+- No perder tiempo logueándote y deslogueándote cada vez
+
+CodexCTL te muestra todo en una tabla: el porcentaje usado, el disponible, y cuándo se reinicia cada ventana (5h, 7d). Todo local, todo directo desde la API de OpenAI.
+
+```
+ID       Cuenta       Email                    Plan     5h%  Disp.  7d%  Disp.  Reinicio
+team-1   Cuenta 1     ignacio@innobyte.cl      team     —    —      90%  10%    mié 05 ago 14:29
+free-1   Cuenta 4     ignacio@innobyte.cl      free     100% 0%     —    —      jue 27 ago 19:22
+```
+
+## Características
 
 ```
 ID       Cuenta       Email                    Plan     5h%  Disp.  7d%  Disp.  Reinicio
