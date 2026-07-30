@@ -151,9 +151,12 @@ pub fn switch(account_id: &str) -> Result<Account> {
     fs::create_dir_all(ambient_home())?;
     fs::copy(&src, &dest)?;
 
-    // chmod 600
-    use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(&dest, fs::Permissions::from_mode(0o600))?;
+    // chmod 600 (solo Unix)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&dest, fs::Permissions::from_mode(0o600))?;
+    }
 
     Ok(acct.clone())
 }
