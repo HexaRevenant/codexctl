@@ -188,6 +188,20 @@ ChatGPT-Account-Id: <account_id>
 5. **`100 - used_percent`** → columna Disp. (disponible / available)
 6. Al cambiar de cuenta, se copia el `auth.json` target a `~/.codex/`
 
+### 🔄 ¿Qué significa "cambiar de cuenta"?
+
+`codexctl switch <id>` copia el `auth.json` de esa cuenta a `~/.codex/auth.json`.
+
+Codex CLI, Codex Desktop y cualquier herramienta que use Codex leen `~/.codex/auth.json` para saber qué cuenta está activa. Por lo tanto, al hacer `codexctl switch`, **todo** lo que ejecutes después (comandos `codex`, MCP servers, etc.) usará **esa cuenta**.
+
+```bash
+codexctl switch team-2      # Activa Team 2
+codex whoami                # → Muestra Team 2
+
+codexctl switch free-4      # Activa Free 4
+codex whoami                # → Muestra Free 4
+```
+
 ---
 
 ## 🔨 Build desde fuente / Build from source / Build da fonte
