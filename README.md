@@ -1,6 +1,10 @@
-# ⌘ CodexCTL
+<p align="center">
+  <img src="mascota.png" alt="CodexCTL" width="320">
+</p>
 
-**Multi-account quota tracker for OpenAI Codex — Rust + Tauri**
+<h1 align="center">⌘ CodexCTL</h1>
+
+<p align="center"><strong>Multi-account quota tracker for OpenAI Codex — Rust + Tauri</strong></p>
 
 Gestión de múltiples cuentas de OpenAI Codex desde Linux, macOS y Windows. Consulta la cuota en vivo de cada cuenta, cambia entre ellas al instante, y lleva el control de tus límites de uso.
 
