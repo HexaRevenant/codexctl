@@ -306,7 +306,7 @@ fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, is_active: bool) ->
 }
 
 fn row(cols: &[&str]) -> String {
-    let widths = [8usize, 20, 34, 8, 8, 8, 8, 8, 20, 7];
+    let widths = [8usize, 22, 34, 8, 8, 9, 8, 9, 20, 7];
     cols.iter()
         .enumerate()
         .map(|(i, c)| {
