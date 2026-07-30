@@ -44,20 +44,49 @@ free-1   Cuenta 4     hexarevenant@gmail.com      free     100% 0%     —    �
 ### Linux
 
 ```bash
-# Descargar AppImage (recomendado — portable, no necesita nada)
+# AppImage (recomendado — portable, 0 dependencias)
 chmod +x codexctl_0.1.0_amd64.AppImage
 ./codexctl_0.1.0_amd64.AppImage
 
-# O instalar .deb
+# .deb (Debian/Ubuntu)
 sudo dpkg -i codexctl_0.1.0_amd64.deb
+codexctl-tauri       # App de escritorio
+codexctl list        # CLI
 
-# CLI
+# .rpm (Fedora/RHEL)
+sudo rpm -i codexctl-0.1.0-1.x86_64.rpm
+
+# CLI solo (binario estático)
 sudo cp codexctl /usr/local/bin/
+codexctl list
 ```
 
-### macOS / Windows
+### macOS
 
-Descargar desde [Releases](https://github.com/HexaRevenant/codexctl/releases).
+```bash
+# Descargar el .dmg desde Releases, abrirlo y arrastrar CodexCTL a Applications
+# O desde terminal:
+cp -r CodexCTL.app /Applications/
+open /Applications/CodexCTL.app
+
+# CLI (binario estático)
+sudo cp codexctl /usr/local/bin/
+codexctl list
+```
+
+### Windows
+
+```powershell
+# Ejecutar el .msi desde Releases (instalador gráfico)
+# O desde terminal:
+msiexec /i codexctl_0.1.0_x64.msi
+
+# CLI
+codexctl list
+
+# App de escritorio
+codexctl-tauri
+```
 
 ## Uso
 
