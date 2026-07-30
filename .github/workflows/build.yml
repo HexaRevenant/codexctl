@@ -70,6 +70,8 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -85,4 +87,3 @@ jobs:
             **/*.AppImage
             **/*.dmg
             **/*.msi
-            **/codexctl
