@@ -12,6 +12,7 @@ pub struct AuthCredentials {
     pub email: Option<String>,
     pub name: Option<String>,
     pub plan_type: Option<String>,
+    pub user_id: Option<String>,
 }
 
 /// A single quota window (5h or 7d).
@@ -44,6 +45,8 @@ pub struct Account {
     pub email: Option<String>,
     pub plan_type: Option<String>,
     pub provider_account_id: Option<String>,
+    #[serde(default)]
+    pub user_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

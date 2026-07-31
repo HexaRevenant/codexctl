@@ -132,6 +132,7 @@ async fn do_refresh(client: &Client, creds: &AuthCredentials) -> Result<AuthCred
         email: creds.email.clone(),
         name: creds.name.clone(),
         plan_type: creds.plan_type.clone(),
+        user_id: creds.user_id.clone(),
     })
 }
 

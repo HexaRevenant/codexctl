@@ -312,16 +312,17 @@ fn print_accounts(
         return;
     }
 
-    let active_id = active.map(|a| a.id.as_str());
+    let targets = manager::active_targets(accounts);
 
-    let hdr = row(&["ID", "Cuenta", "Email", "Plan", "5h%", "Disp.5h", "7d%", "Disp.7d", "Reinicio", "Activa"]);
+    let hdr = row(&["ID", "Cuenta", "Email", "Plan", "5h%", "Disp.5h", "7d%", "Disp.7d", "Reinicio", "Activo en"]);
     let sep = row(&["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
     println!("{hdr}");
     println!("{sep}");
 
     for acct in accounts {
         let snap = quotas.and_then(|q| q.get(&acct.id));
-        let line = account_row(acct, snap, active_id == Some(acct.id.as_str()));
+        let where_active = targets.get(&acct.id).map(|s| s.as_str()).unwrap_or("");
+        let line = account_row(acct, snap, where_active);
         println!("{line}");
     }
 
@@ -333,14 +334,20 @@ fn print_accounts(
     }
 }
 
-fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, is_active: bool) -> String {
+fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, where_active: &str) -> String {
+    let label = match where_active {
+        "both" => "Ambos",
+        "codex" => "Codex",
+        "opencode" => "OpenCode",
+        _ => "",
+    };
     match snap {
         None => row(&[
             &acct.id, &acct.nickname,
             acct.email.as_deref().unwrap_or("?"),
             acct.plan_type.as_deref().unwrap_or("?"),
             "—", "—", "—", "—", "—",
-            if is_active { "✅" } else { "" },
+            label,
         ]),
         Some(s) => {
             let (p5, d5) = format_quota(&s.primary_window);
@@ -351,12 +358,11 @@ fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, is_active: bool) ->
                 .or(s.primary_window.as_ref())
                 .and_then(|w| w.reset_at);
             let reset_str = format_fecha(reset);
-            let act = if is_active { "✅" } else { "" };
             row(&[
                 &acct.id, &acct.nickname,
                 s.email.as_deref().or(acct.email.as_deref()).unwrap_or("?"),
                 s.plan_type.as_deref().or(acct.plan_type.as_deref()).unwrap_or("?"),
-                &p5, &d5, &p7, &d7, &reset_str, act,
+                &p5, &d5, &p7, &d7, &reset_str, label,
             ])
         }
     }

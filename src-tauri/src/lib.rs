@@ -7,6 +7,7 @@ struct AccountInfo {
     email: String,
     plan_type: String,
     is_active: bool,
+    active_in: String,
     quota_5h: String,
     disp_5h: String,
     quota_7d: String,
@@ -19,9 +20,11 @@ async fn list_accounts(fetch_quota: bool) -> Result<Vec<AccountInfo>, String> {
     let client = reqwest::Client::new();
     let accounts = codexctl::manager::load().map_err(|e| e.to_string())?;
     let active = codexctl::manager::active(&accounts);
+    let targets = codexctl::manager::active_targets(&accounts);
     let mut result = Vec::new();
     for acct in &accounts {
         let is_active = active.as_ref().map(|a| a.id == acct.id).unwrap_or(false);
+        let active_in = targets.get(&acct.id).cloned().unwrap_or_default();
         let (p5, d5, p7, d7, reset) = if fetch_quota {
             let auth_path = codexctl::manager::homes_dir().join(&acct.uuid).join("auth.json");
             if let Some(q) = quota_for_account(&client, &auth_path).await {
@@ -38,6 +41,7 @@ async fn list_accounts(fetch_quota: bool) -> Result<Vec<AccountInfo>, String> {
             email: acct.email.clone().unwrap_or_default(),
             plan_type: acct.plan_type.clone().unwrap_or_default(),
             is_active,
+            active_in,
             quota_5h: p5,
             disp_5h: d5,
             quota_7d: p7,
@@ -128,6 +132,7 @@ async fn export_accounts(path: String) -> Result<String, String> {
             "email": acct.email,
             "plan_type": acct.plan_type,
             "provider_account_id": acct.provider_account_id,
+            "user_id": acct.user_id,
             "created_at": acct.created_at,
             "updated_at": acct.updated_at,
             "auth": auth,
@@ -190,6 +195,7 @@ async fn import_accounts(path: String) -> Result<String, String> {
             email: item.get("email").and_then(|v| v.as_str()).map(String::from),
             plan_type: item.get("plan_type").and_then(|v| v.as_str()).map(String::from),
             provider_account_id: item.get("provider_account_id").and_then(|v| v.as_str()).map(String::from),
+            user_id: item.get("user_id").and_then(|v| v.as_str()).map(String::from),
             created_at: item.get("created_at").and_then(|v| v.as_str()).unwrap_or(&now).to_string(),
             updated_at: now.clone(),
         };

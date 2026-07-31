@@ -90,7 +90,7 @@
 <div id="loading" class="loading">Cargando...</div>
 <table id="accountsTable" style="display:none">
   <thead><tr>
-    <th>Cuenta</th><th>Email</th><th>Plan</th><th>5h%</th><th>Disp.</th><th>7d%</th><th>Disp.</th><th>Reinicio</th><th></th>
+    <th>Cuenta</th><th>Email</th><th>Plan</th><th>Activo en</th><th>5h%</th><th>Disp.</th><th>7d%</th><th>Disp.</th><th>Reinicio</th><th></th>
   </tr></thead>
   <tbody id="tbody"></tbody>
 </table>
@@ -242,10 +242,13 @@ function renderTable(accounts, status) {
     const tr = document.createElement("tr");
     if (a.is_active) tr.classList.add("active");
     const q5 = quotaClass(a.quota_5h), q7 = quotaClass(a.quota_7d);
+    const activeIn = a.active_in === "both" ? "Ambos" : a.active_in === "codex" ? "Codex" : a.active_in === "opencode" ? "OpenCode" : "—";
+    const activeInClass = a.active_in === "both" ? "tag-team" : a.active_in === "codex" ? "tag-team" : a.active_in === "opencode" ? "tag-free" : "";
     tr.innerHTML = `
       <td><strong>${esc(a.nickname)}</strong> ${a.is_active ? '<span style="color:var(--green)">●</span>' : ''}</td>
       <td style="color:var(--text2)">${esc(a.email)}</td>
       <td><span class="tag tag-${a.plan_type}">${esc(a.plan_type)}</span></td>
+      <td><span class="tag ${activeInClass}">${esc(activeIn)}</span></td>
       <td class="${q5}">${esc(a.quota_5h)}</td>
       <td class="${q5}">${esc(a.disp_5h)}</td>
       <td class="${q7}">${esc(a.quota_7d)}</td>

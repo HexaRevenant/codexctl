@@ -98,6 +98,7 @@ pub fn add(nickname: &str) -> Result<Account> {
         email: creds.email.take(),
         plan_type: Some(plan),
         provider_account_id: creds.account_id.take(),
+        user_id: creds.user_id.take(),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -265,8 +266,7 @@ pub fn opencode_status() -> Result<OpencodeInfo> {
 
     Ok(OpencodeInfo {
         account_id,
-        expires_at,
-        has_refresh,
+        expires_at,        has_refresh,
         matched_account: matched,
     })
 }
@@ -300,6 +300,86 @@ pub fn active(accounts: &[Account]) -> Option<Account> {
         }
     }
     None
+}
+
+/// Where each account is active: "codex", "opencode", "both", or "".
+pub fn active_targets(accounts: &[Account]) -> std::collections::HashMap<String, String> {
+    let mut map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for a in accounts {
+        map.insert(a.id.clone(), String::new());
+    }
+
+    // Codex: auth.json bytes match ~/.codex/auth.json
+    if let Ok(ambient_bytes) = fs::read(ambient_auth()) {
+        for acct in accounts {
+            let acct_auth = homes_dir().join(&acct.uuid).join("auth.json");
+            if let Ok(bytes) = fs::read(&acct_auth) {
+                if bytes == ambient_bytes {
+                    map.entry(acct.id.clone()).and_modify(|v| *v = if v.is_empty() { "codex".into() } else { "both".into() });
+                }
+            }
+        }
+    }
+
+    // OpenCode: first try EXACT token match (the home whose access token
+    // equals the one OpenCode holds). Falls back to user_id, then accountId.
+    let oc_access = opencode_access_token();
+    let oc_user_id = opencode_access_user_id();
+    let oc_id = opencode_status()
+        .map(|i| i.account_id)
+        .unwrap_or_default();
+
+    for acct in accounts {
+        let acct_uid = acct.user_id.clone().or_else(|| {
+            let p = homes_dir().join(&acct.uuid).join("auth.json");
+            crate::auth::load(&p).ok().and_then(|c| c.user_id)
+        });
+
+        let matches = if let Some(oc_tok) = &oc_access {
+            // Exact: same access token → same home
+            let acct_auth_path = homes_dir().join(&acct.uuid).join("auth.json");
+            let acct_tok = crate::auth::load(&acct_auth_path).ok().map(|c| c.access_token);
+            acct_tok.as_deref() == Some(oc_tok.as_str())
+        } else if let Some(uid) = &oc_user_id {
+            acct_uid.as_deref() == Some(uid.as_str())
+        } else {
+            !oc_id.is_empty() && acct.provider_account_id.as_deref() == Some(oc_id.as_str())
+        };
+
+        if matches {
+            map.entry(acct.id.clone()).and_modify(|v| *v = if v.is_empty() { "opencode".into() } else { "both".into() });
+        }
+    }
+
+    map
+}
+
+/// The raw access token that OpenCode currently holds for `openai`.
+fn opencode_access_token() -> Option<String> {
+    let path = opencode_auth_path();
+    if !path.exists() {
+        return None;
+    }
+    let store: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
+    store.get("openai")?.get("access")?.as_str().map(String::from)
+}
+
+/// Decode the user_id (chatgpt_user_id) from the access token that
+/// OpenCode currently holds for its `openai` provider.
+fn opencode_access_user_id() -> Option<String> {
+    let path = opencode_auth_path();
+    if !path.exists() {
+        return None;
+    }
+    let store: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
+    let access = store.get("openai")?.get("access")?.as_str()?;
+    let part = access.split('.').nth(1)?;
+    let padded = format!("{}{}", part, "=".repeat((4 - part.len() % 4) % 4));
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::URL_SAFE.decode(padded.as_bytes()).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let auth = value.get("https://api.openai.com/auth")?;
+    auth.get("chatgpt_user_id")?.as_str().map(String::from)
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

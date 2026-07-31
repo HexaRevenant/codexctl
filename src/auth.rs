@@ -25,6 +25,7 @@ pub fn load(path: &Path) -> Result<AuthCredentials> {
                 email: None,
                 name: None,
                 plan_type: None,
+                user_id: None,
             });
         }
     }
@@ -62,6 +63,7 @@ pub fn load(path: &Path) -> Result<AuthCredentials> {
         email: None,
         name: None,
         plan_type: None,
+        user_id: None,
     };
 
     // Extract metadata from id_token JWT
@@ -85,6 +87,10 @@ pub fn load(path: &Path) -> Result<AuthCredentials> {
                         .and_then(|v| v.as_str())
                         .map(String::from)
                 });
+                creds.user_id = auth
+                    .get("chatgpt_user_id")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
                 creds.account_id = creds.account_id.or_else(|| {
                     auth.get("chatgpt_account_id")
                         .and_then(|v| v.as_str())
