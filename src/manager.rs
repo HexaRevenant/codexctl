@@ -160,6 +160,127 @@ pub fn switch(account_id: &str) -> Result<Account> {
     Ok(acct.clone())
 }
 
+// ── OpenCode integration ────────────────────────────────────────────
+
+/// Path to OpenCode's auth store.
+pub fn opencode_auth_path() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("opencode")
+        .join("auth.json")
+}
+
+/// Switch the OpenAI account used by OpenCode (writes its auth store).
+///
+/// OpenCode stores `{type: "oauth", access, refresh, expires, accountId}`
+/// under the `openai` key. We refresh the account's tokens if stale,
+/// then copy them there, deriving `expires` from the JWT `exp` claim.
+pub async fn opencode_switch(client: &reqwest::Client, account_id: &str) -> Result<Account> {
+    let all = load()?;
+    let acct = resolve(&all, account_id)?;
+    let src = homes_dir().join(&acct.uuid).join("auth.json");
+    if !src.exists() {
+        anyhow::bail!("La cuenta '{}' no tiene auth.json", acct.id);
+    }
+    let mut creds = crate::auth::load(&src)?;
+
+    // Refresh tokens first if stale, so OpenCode gets fresh ones
+    match crate::api::maybe_refresh(client, &creds).await {
+        Ok(Some(fresh)) => {
+            crate::auth::save(&fresh, &src)?;
+            creds = fresh;
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("⚠️  no se pudo refrescar tokens (se usan los actuales): {e}");
+        }
+    }
+
+    let path = opencode_auth_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // Backup before touching
+    if path.exists() {
+        let bak = path.with_extension("json.bak");
+        fs::copy(&path, &bak)?;
+    }
+
+    let mut store: serde_json::Value = if path.exists() {
+        serde_json::from_str(&fs::read_to_string(&path)?).unwrap_or(serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    let expires_ms = jwt_exp_ms(&creds.access_token).unwrap_or(0);
+    store["openai"] = serde_json::json!({
+        "type": "oauth",
+        "access": creds.access_token,
+        "refresh": creds.refresh_token,
+        "expires": expires_ms,
+        "accountId": creds.account_id.clone().unwrap_or_default(),
+    });
+
+    fs::write(&path, serde_json::to_string_pretty(&store)? + "\n")?;
+    Ok(acct.clone())
+}
+
+/// Info about the account OpenCode currently uses.
+pub struct OpencodeInfo {
+    pub account_id: String,
+    pub expires_at: Option<i64>, // epoch ms
+    pub has_refresh: bool,
+    pub matched_account: Option<Account>,
+}
+
+/// Read OpenCode's auth store and report which OpenAI account it uses.
+pub fn opencode_status() -> Result<OpencodeInfo> {
+    let path = opencode_auth_path();
+    if !path.exists() {
+        anyhow::bail!("No existe el auth de OpenCode en {}", path.display());
+    }
+    let store: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let oai = store
+        .get("openai")
+        .ok_or_else(|| anyhow::anyhow!("OpenCode no tiene provider 'openai' configurado."))?;
+
+    let account_id = oai
+        .get("accountId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let expires_at = oai.get("expires").and_then(|v| v.as_i64());
+    let has_refresh = oai
+        .get("refresh")
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+
+    let all = load()?;
+    let matched = all
+        .iter()
+        .find(|a| a.provider_account_id.as_deref() == Some(account_id.as_str()))
+        .cloned();
+
+    Ok(OpencodeInfo {
+        account_id,
+        expires_at,
+        has_refresh,
+        matched_account: matched,
+    })
+}
+
+/// Decode the `exp` claim (seconds) of a JWT and return milliseconds.
+fn jwt_exp_ms(token: &str) -> Option<i64> {
+    let part = token.split('.').nth(1)?;
+    let padded = format!("{}{}", part, "=".repeat((4 - part.len() % 4) % 4));
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::URL_SAFE.decode(padded.as_bytes()).ok()?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    value.get("exp")?.as_i64().map(|s| s * 1000)
+}
+
 /// Find which account is currently active (auth matches ~/.codex/auth.json).
 pub fn active(accounts: &[Account]) -> Option<Account> {
     if !ambient_auth().exists() {

@@ -54,6 +54,25 @@ async fn switch_account(account_id: String) -> Result<String, String> {
     Ok(format!("✅ Activada: {}", acct.nickname))
 }
 
+/// Switch account to Codex, OpenCode, or both.
+/// targets is a subset of ["codex", "opencode"].
+#[tauri::command]
+async fn switch_account_targets(account_id: String, targets: Vec<String>) -> Result<String, String> {
+    let mut done: Vec<String> = Vec::new();
+
+    if targets.iter().any(|t| t == "codex") || targets.is_empty() {
+        let acct = codexctl::manager::switch(&account_id).map_err(|e| e.to_string())?;
+        done.push(format!("Codex → {}", acct.nickname));
+    }
+    if targets.iter().any(|t| t == "opencode") {
+        let client = reqwest::Client::new();
+        let acct = codexctl::manager::opencode_switch(&client, &account_id).await.map_err(|e| e.to_string())?;
+        done.push(format!("OpenCode → {}", acct.nickname));
+    }
+
+    Ok(format!("✅ {}", done.join(" · ")))
+}
+
 #[tauri::command]
 async fn rename_account(account_id: String, nickname: String) -> Result<String, String> {
     codexctl::manager::rename(&account_id, &nickname).map_err(|e| e.to_string())?;
@@ -218,7 +237,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            list_accounts, switch_account, rename_account,
+            list_accounts, switch_account, switch_account_targets, rename_account,
             remove_account, get_status, add_account,
             export_accounts, import_accounts,
         ])

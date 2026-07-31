@@ -28,9 +28,11 @@ enum Commands {
     Add {
         nickname: String,
     },
-    /// Cambiar la cuenta activa
+    /// Cambiar la cuenta activa (destinos: codex, opencode o ambos)
     Switch {
         account: String,
+        #[arg(long, default_value = "codex", help = "codex | opencode | both")]
+        target: String,
     },
     /// Eliminar una cuenta
     Remove {
@@ -51,6 +53,12 @@ enum Commands {
     Quota {
         account: Option<String>,
     },
+    /// Cambiar la cuenta de OpenAI usada por OpenCode
+    OpencodeSwitch {
+        account: String,
+    },
+    /// Ver qué cuenta usa OpenCode y cuándo expira
+    OpencodeStatus,
 }
 
 pub async fn run() -> anyhow::Result<()> {
@@ -60,13 +68,47 @@ pub async fn run() -> anyhow::Result<()> {
     match cli.command {
         Commands::List { no_quota } => cmd_list(&client, no_quota).await,
         Commands::Add { nickname } => cmd_add(&nickname),
-        Commands::Switch { account } => cmd_switch(&account),
+        Commands::Switch { account, target } => cmd_switch(&client, &account, &target).await,
         Commands::Remove { account } => cmd_remove(&account),
         Commands::Rename { account, nickname } => cmd_rename(&account, &nickname),
         Commands::Refresh { account } => cmd_refresh(&client, account.as_deref()).await,
         Commands::Status => cmd_status(),
         Commands::Quota { account } => cmd_quota(&client, account.as_deref()).await,
+        Commands::OpencodeSwitch { account } => cmd_opencode_switch(&client, &account).await,
+        Commands::OpencodeStatus => cmd_opencode_status(),
     }
+}
+
+async fn cmd_opencode_switch(client: &reqwest::Client, account_id: &str) -> anyhow::Result<()> {
+    let acct = manager::opencode_switch(client, account_id).await?;
+    println!(
+        "✅ OpenCode ahora usa: \"{}\" ({})",
+        acct.nickname,
+        acct.email.as_deref().unwrap_or("?")
+    );
+    println!("   Backup del auth anterior en ~/.local/share/opencode/auth.json.bak");
+    Ok(())
+}
+
+fn cmd_opencode_status() -> anyhow::Result<()> {
+    let info = manager::opencode_status()?;
+    println!("OpenCode usa el provider openai:");
+    println!("  accountId: {}", info.account_id);
+    if let Some(exp) = info.expires_at {
+        let exp_dt = chrono::DateTime::from_timestamp_millis(exp)
+            .map(|d| d.with_timezone(&chrono::Local).format("%d %b %Y %H:%M").to_string())
+            .unwrap_or_else(|| "?".into());
+        println!("  expira:    {exp_dt}");
+    } else {
+        println!("  expira:    ?");
+    }
+    println!("  refresh:   {}", if info.has_refresh { "✅ sí" } else { "❌ no" });
+    if let Some(acct) = &info.matched_account {
+        println!("  cuenta:    \"{}\" ({})", acct.nickname, acct.email.as_deref().unwrap_or("?"));
+    } else {
+        println!("  cuenta:    no coincide con ninguna registrada en codexctl");
+    }
+    Ok(())
 }
 
 // ── Commands ─────────────────────────────────────────────────────────
@@ -100,9 +142,24 @@ fn cmd_add(nickname: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_switch(account_id: &str) -> anyhow::Result<()> {
-    let acct = manager::switch(account_id)?;
-    println!("✅ Activada: \"{}\" (ID: {})", acct.nickname, acct.id);
+async fn cmd_switch(client: &reqwest::Client, account_id: &str, target: &str) -> anyhow::Result<()> {
+    match target {
+        "codex" => {
+            let acct = manager::switch(account_id)?;
+            println!("✅ Activada en Codex: \"{}\" (ID: {})", acct.nickname, acct.id);
+        }
+        "opencode" => {
+            let acct = manager::opencode_switch(client, account_id).await?;
+            println!("✅ Activada en OpenCode: \"{}\" (ID: {})", acct.nickname, acct.id);
+        }
+        "both" => {
+            let acct = manager::switch(account_id)?;
+            println!("✅ Activada en Codex: \"{}\" (ID: {})", acct.nickname, acct.id);
+            let acct2 = manager::opencode_switch(client, account_id).await?;
+            println!("✅ Activada en OpenCode: \"{}\" (ID: {})", acct2.nickname, acct2.id);
+        }
+        other => anyhow::bail!("target inválido: {other} (usá codex, opencode o both)"),
+    }
     Ok(())
 }
 

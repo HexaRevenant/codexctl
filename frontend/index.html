@@ -24,7 +24,14 @@
     font-size: 0.85em; color: var(--green); background: rgba(46,204,113,0.15);
     padding: 4px 12px; border-radius: 12px;
   }
-  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .target-picker {
+    margin-left: auto; font-size: 0.85em; color: var(--text2);
+    display: flex; gap: 10px; align-items: center;
+    background: var(--surface); padding: 6px 12px; border-radius: 6px;
+  }
+  .target-picker label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .target-picker input { accent-color: var(--accent); cursor: pointer; }
   .toolbar button {
     background: var(--surface2); color: var(--text); border: none;
     padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9em;
@@ -74,6 +81,11 @@
   <button onclick="showAddModal()">➕ Agregar</button>
   <button onclick="exportAccounts()">📤 Exportar</button>
   <button onclick="importAccounts()">📥 Importar</button>
+  <span class="target-picker">
+    Cambiar en:
+    <label><input type="checkbox" id="tgtCodex" checked> Codex</label>
+    <label><input type="checkbox" id="tgtOpencode"> OpenCode</label>
+  </span>
 </div>
 <div id="loading" class="loading">Cargando...</div>
 <table id="accountsTable" style="display:none">
@@ -149,7 +161,12 @@ async function refreshAll() {
 
 async function switchAccount(id) {
   try {
-    const msg = await invoke("switch_account", { accountId: id });
+    const targets = [];
+    if (document.getElementById("tgtCodex").checked) targets.push("codex");
+    if (document.getElementById("tgtOpencode").checked) targets.push("opencode");
+    if (targets.length === 0) { showToast("Seleccioná al menos un destino (Codex u OpenCode)", true); return; }
+
+    const msg = await invoke("switch_account_targets", { accountId: id, targets });
     showToast(msg); await refreshAll();
   } catch(e) { showToast("Error: " + e, true); }
 }
