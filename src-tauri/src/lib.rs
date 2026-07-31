@@ -84,6 +84,116 @@ async fn add_account(nickname: String) -> Result<String, String> {
     Ok(format!("✅ Agregada: \"{}\" (ID: {})", acct.nickname, acct.id))
 }
 
+/// Export all accounts (auth.json content included) to a single JSON file.
+#[tauri::command]
+async fn export_accounts(path: String) -> Result<String, String> {
+    let accounts = codexctl::manager::load().map_err(|e| e.to_string())?;
+    let homes = codexctl::manager::homes_dir();
+
+    let mut items: Vec<serde_json::Value> = Vec::new();
+    for acct in &accounts {
+        let auth_path = homes.join(&acct.uuid).join("auth.json");
+        let auth: serde_json::Value = if auth_path.exists() {
+            std::fs::read_to_string(&auth_path)
+                .ok()
+                .and_then(|t| serde_json::from_str(&t).ok())
+                .unwrap_or(serde_json::Value::Null)
+        } else {
+            serde_json::Value::Null
+        };
+
+        items.push(serde_json::json!({
+            "id": acct.id,
+            "nickname": acct.nickname,
+            "uuid": acct.uuid,
+            "email": acct.email,
+            "plan_type": acct.plan_type,
+            "provider_account_id": acct.provider_account_id,
+            "created_at": acct.created_at,
+            "updated_at": acct.updated_at,
+            "auth": auth,
+        }));
+    }
+
+    let export = serde_json::json!({
+        "app": "codexctl",
+        "format": 1,
+        "exported_at": chrono::Utc::now().to_rfc3339(),
+        "accounts": items,
+    });
+
+    std::fs::write(&path, serde_json::to_string_pretty(&export).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("no se pudo escribir: {e}"))?;
+
+    Ok(format!("✅ Exportadas {} cuentas a {}", accounts.len(), path))
+}
+
+/// Import accounts from an exported JSON file (skips already-known uuids).
+#[tauri::command]
+async fn import_accounts(path: String) -> Result<String, String> {
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("no se pudo leer: {e}"))?;
+    let export: serde_json::Value = serde_json::from_str(&content).map_err(|e| format!("JSON inválido: {e}"))?;
+
+    if export.get("app").and_then(|v| v.as_str()) != Some("codexctl") {
+        return Err("No es un archivo de export de codexctl.".into());
+    }
+
+    let items = export
+        .get("accounts")
+        .and_then(|v| v.as_array())
+        .ok_or("El archivo no tiene cuentas.")?;
+
+    let mut current = codexctl::manager::load().map_err(|e| e.to_string())?;
+    let homes = codexctl::manager::homes_dir();
+    let mut imported = 0usize;
+
+    for item in items {
+        let uuid = item.get("uuid").and_then(|v| v.as_str()).unwrap_or("");
+        let auth = item.get("auth");
+        if uuid.is_empty() || auth.is_none() || auth.unwrap().is_null() {
+            continue;
+        }
+        if current.iter().any(|a| a.uuid == uuid) {
+            continue; // ya importada
+        }
+
+        let home_dir = homes.join(uuid);
+        std::fs::create_dir_all(&home_dir).map_err(|e| e.to_string())?;
+
+        let auth_json = serde_json::to_string_pretty(auth.unwrap()).map_err(|e| e.to_string())?;
+        std::fs::write(home_dir.join("auth.json"), auth_json + "\n").map_err(|e| e.to_string())?;
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let acct = codexctl::models::Account {
+            id: item.get("id").and_then(|v| v.as_str()).unwrap_or("imported").to_string(),
+            nickname: item.get("nickname").and_then(|v| v.as_str()).unwrap_or("Importada").to_string(),
+            uuid: uuid.to_string(),
+            email: item.get("email").and_then(|v| v.as_str()).map(String::from),
+            plan_type: item.get("plan_type").and_then(|v| v.as_str()).map(String::from),
+            provider_account_id: item.get("provider_account_id").and_then(|v| v.as_str()).map(String::from),
+            created_at: item.get("created_at").and_then(|v| v.as_str()).unwrap_or(&now).to_string(),
+            updated_at: now.clone(),
+        };
+
+        let meta = serde_json::json!({
+            "id": acct.id,
+            "nickname": acct.nickname,
+            "email": acct.email,
+            "plan_type": acct.plan_type,
+            "created_at": acct.created_at,
+            "updated_at": acct.updated_at,
+        });
+        std::fs::write(home_dir.join("meta.json"), serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())? + "\n")
+            .map_err(|e| e.to_string())?;
+
+        current.push(acct);
+        imported += 1;
+    }
+
+    codexctl::manager::save(&current).map_err(|e| e.to_string())?;
+    Ok(format!("✅ Importadas {imported} cuentas"))
+}
+
 async fn quota_for_account(client: &reqwest::Client, auth_path: &std::path::Path) -> Option<(String, String, String, String, String)> {
     if !auth_path.exists() { return None; }
     let creds = codexctl::auth::load(auth_path).ok()?;
@@ -106,9 +216,11 @@ async fn quota_for_account(client: &reqwest::Client, auth_path: &std::path::Path
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_accounts, switch_account, rename_account,
             remove_account, get_status, add_account,
+            export_accounts, import_accounts,
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri application");

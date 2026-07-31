@@ -72,6 +72,8 @@
 <div class="toolbar">
   <button onclick="refreshAll()">🔄 Actualizar</button>
   <button onclick="showAddModal()">➕ Agregar</button>
+  <button onclick="exportAccounts()">📤 Exportar</button>
+  <button onclick="importAccounts()">📥 Importar</button>
 </div>
 <div id="loading" class="loading">Cargando...</div>
 <table id="accountsTable" style="display:none">
@@ -183,6 +185,36 @@ async function removeAccount(id, nickname) {
   try {
     const msg = await invoke("remove_account", { accountId: id });
     showToast(msg); await refreshAll();
+  } catch(e) { showToast("Error: " + e, true); }
+}
+
+async function exportAccounts() {
+  try {
+    const path = await invoke('plugin:dialog|save', {
+      options: {
+        title: "Guardar cuentas",
+        defaultPath: "codexctl-cuentas.json",
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      }
+    });
+    if (!path) return; // cancelado
+    const msg = await invoke("export_accounts", { path });
+    showToast(msg);
+  } catch(e) { showToast("Error: " + e, true); }
+}
+
+async function importAccounts() {
+  try {
+    const path = await invoke('plugin:dialog|open', {
+      options: {
+        title: "Importar cuentas",
+        filters: [{ name: 'JSON', extensions: ['json'] }]
+      }
+    });
+    if (!path) return; // cancelado
+    const msg = await invoke("import_accounts", { path: String(path) });
+    showToast(msg);
+    await refreshAll();
   } catch(e) { showToast("Error: " + e, true); }
 }
 
