@@ -170,6 +170,15 @@ O desde el menú de aplicaciones → **CodexCTL**.
 Or from the applications menu → **CodexCTL**.  
 Ou do menu de aplicativos → **CodexCTL**.
 
+### 📤 Exportar / Importar cuentas
+
+Mover tus cuentas entre máquinas (Linux → Windows → macOS) sin volver a loguearte:
+
+- **Exportar**: botón 📤 en la app → guarda un archivo `.json` con todas tus cuentas (tokens incluidos)
+- **Importar**: botón 📥 en la app → elige el `.json` exportado y las cuentas aparecen automáticamente
+
+En la app de escritorio, ambos usan el diálogo nativo de archivos de cada sistema.
+
 ---
 
 ## 🔧 Cómo funciona / How it works / Como funciona
