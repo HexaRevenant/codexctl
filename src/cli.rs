@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc, Datelike, Timelike};
+use chrono::{DateTime, Utc, Datelike};
 use clap::{Parser, Subcommand};
 
 use crate::api;
@@ -231,7 +231,7 @@ async fn fetch_one(client: &reqwest::Client, acct: &Account) -> QuotaSnapshot {
     }
 }
 
-fn error_snapshot(msg: &str) -> QuotaSnapshot {
+fn error_snapshot(_msg: &str) -> QuotaSnapshot {
     QuotaSnapshot {
         email: None,
         plan_type: None,
@@ -343,7 +343,7 @@ fn format_fecha(dt: Option<DateTime<Utc>>) -> String {
 
             if local_date == today {
                 format!("hoy {}", local.format("%H:%M"))
-            } else if local_date == today.succ() {
+            } else if local_date == today.succ_opt().unwrap_or(today) {
                 format!("mañana {}", local.format("%H:%M"))
             } else if local.year() == now.year() {
                 let dow = DAYS[local.weekday().num_days_from_monday() as usize];

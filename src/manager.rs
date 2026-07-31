@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use serde_json::Value;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::fs;
 use uuid::Uuid;
 
@@ -185,11 +184,13 @@ pub fn active(accounts: &[Account]) -> Option<Account> {
 // ── Helpers ─────────────────────────────────────────────────────────
 
 fn which_codex() -> Option<PathBuf> {
+    // On Windows the binary is codex.exe; on Unix it's codex
+    let exe = if cfg!(windows) { "codex.exe" } else { "codex" };
     std::env::var_os("PATH")
         .as_ref()
         .and_then(|path| {
             std::env::split_paths(path).find_map(|dir| {
-                let candidate = dir.join("codex");
+                let candidate = dir.join(exe);
                 if candidate.is_file() {
                     Some(candidate)
                 } else {
