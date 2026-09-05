@@ -1,6 +1,6 @@
 [package]
 name = "codexctl"
-version = "0.2.0"
+version = "0.2.0+90ec0d1"
 edition = "2021"
 description = "Multi-account quota tracker for OpenAI Codex"
 

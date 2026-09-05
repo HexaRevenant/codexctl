@@ -1,6 +1,6 @@
 [package]
 name = "codexctl-tauri"
-version = "0.2.0"
+version = "0.2.0+90ec0d1"
 description = "CodexCTL Desktop App"
 authors = ["you"]
 edition = "2021"

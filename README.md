@@ -2,6 +2,8 @@
 
 <p align="center"><strong>Multi-account quota tracker for OpenAI Codex — Rust + Tauri</strong></p>
 
+<p align="center">Release <code>0.2.0+90ec0d1</code></p>
+
 <p align="center">
   <img src="mascota.png" alt="CodexCTL" width="320">
 </p>
@@ -20,8 +22,8 @@ CodexCTL te muestra todo en una tabla: el porcentaje usado, el disponible, y cu�
 
 ```
 ID       Cuenta       Email                    Plan     5h%  Disp.  7d%  Disp.  Reinicio
-team-1   Cuenta 1     hexarevenant@gmail.com    team     —    —      90%  10%    mié 05 ago 14:29
-free-1   Cuenta 4     hexarevenant@gmail.com    free     100% 0%     —    —      jue 27 ago 19:22
+team-1   Cuenta 1     account@example.com       team     —    —      90%  10%    mié 05 ago 14:29
+free-1   Cuenta 4     account@example.com       free     100% 0%     —    —      jue 27 ago 19:22
 ```
 
 ## 🇬🇧 English — What is it for?
@@ -36,8 +38,8 @@ CodexCTL shows a table with used percentage, available percentage, and reset tim
 
 ```
 ID       Account      Email                    Plan     5h%  Avail. 7d%  Avail. Reset
-team-1   Account 1    hexarevenant@gmail.com    team     —    —      90%  10%    Wed 05 Aug 14:29
-free-1   Account 4    hexarevenant@gmail.com    free     100% 0%     —    —      Thu 27 Aug 19:22
+team-1   Account 1    account@example.com       team     —    —      90%  10%    Wed 05 Aug 14:29
+free-1   Account 4    account@example.com       free     100% 0%     —    —      Thu 27 Aug 19:22
 ```
 
 ## 🇧🇷 Português — Para que serve?
@@ -52,8 +54,8 @@ O CodexCTL mostra tudo em uma tabela: a porcentagem usada, a disponível, e quan
 
 ```
 ID       Conta        Email                    Plano    5h%  Disp.  7d%  Disp.  Reinício
-team-1   Conta 1      hexarevenant@gmail.com    team     —    —      90%  10%    qua 05 ago 14:29
-free-1   Conta 4      hexarevenant@gmail.com    free     100% 0%     —    —      qui 27 ago 19:22
+team-1   Conta 1      account@example.com       team     —    —      90%  10%    qua 05 ago 14:29
+free-1   Conta 4      account@example.com       free     100% 0%     —    —      qui 27 ago 19:22
 ```
 
 ---
@@ -65,9 +67,12 @@ free-1   Conta 4      hexarevenant@gmail.com    free     100% 0%     —    — 
 | Quota en vivo desde la API de OpenAI | Live quota from the OpenAI API | Cota ao vivo da API da OpenAI |
 | Múltiples cuentas (Plus, Team, Free) | Multiple accounts (Plus, Team, Free) | Múltiplas contas (Plus, Team, Free) |
 | Switch instantáneo entre cuentas | Instant account switching | Troca instantânea entre contas |
+| Contador de **reinicios gratis** | **Free-reset** counter | Contador de **reinícios grátis** |
+| Estado de destino en Codex y OpenCode | Codex and OpenCode destination status | Estado do destino no Codex e OpenCode |
 | Refresh automático cada 5 minutos | Auto-refresh every 5 minutes | Atualização automática a cada 5 min |
+| Colores y controles de teclado en la TUI | TUI colors and keyboard controls | Cores e controles de teclado na TUI |
 | Multiplataforma (Linux, macOS, Windows) | Cross-platform (Linux, macOS, Windows) | Multiplataforma (Linux, macOS, Windows) |
-| Hecho en Rust — binario único | Built in Rust — single binary | Feito em Rust — binário único |
+| Paquetes de escritorio con GUI y CLI incluidos | Desktop packages include both GUI and CLI | Pacotes desktop incluem GUI e CLI |
 
 ---
 
@@ -77,16 +82,16 @@ free-1   Conta 4      hexarevenant@gmail.com    free     100% 0%     —    — 
 
 ```bash
 # AppImage (recomendado — portable, 0 dependencias)
-chmod +x codexctl_0.1.0_amd64.AppImage
-./codexctl_0.1.0_amd64.AppImage
+chmod +x codexctl_0.2.0+90ec0d1_amd64.AppImage
+./codexctl_0.2.0+90ec0d1_amd64.AppImage
 
 # .deb (Debian/Ubuntu)
-sudo dpkg -i codexctl_0.1.0_amd64.deb
+sudo dpkg -i codexctl_0.2.0+90ec0d1_amd64.deb
 codexctl-tauri       # App de escritorio
 codexctl list        # CLI
 
 # .rpm (Fedora/RHEL)
-sudo rpm -i codexctl-0.1.0-1.x86_64.rpm
+sudo rpm -i codexctl-0.2.0+90ec0d1-1.x86_64.rpm
 
 # CLI solo (binario estático)
 sudo cp codexctl /usr/local/bin/
@@ -111,7 +116,7 @@ codexctl list
 ```powershell
 # Ejecutar el .msi desde Releases (instalador gráfico)
 # O desde terminal:
-msiexec /i codexctl_0.1.0_x64.msi
+msiexec /i codexctl_0.2.0+90ec0d1_x64.msi
 
 # CLI
 codexctl list
@@ -119,6 +124,10 @@ codexctl list
 # App de escritorio
 codexctl-tauri
 ```
+
+Los paquetes de escritorio de Linux, macOS y Windows incluyen la GUI y el CLI.
+Desktop packages for Linux, macOS, and Windows include both the GUI and CLI.
+Os pacotes desktop para Linux, macOS e Windows incluem a GUI e o CLI.
 
 ---
 
@@ -135,19 +144,21 @@ codexctl remove <id>       # Eliminar cuenta
 codexctl refresh           # Forzar refresh de tokens
 codexctl status            # Ver cuenta activa
 codexctl tui               # Abrir la interfaz interactiva de terminal
+codexctl reauth <account>  # Reautenticar una cuenta
 ```
 
 #### Terminal TUI
 
 Ejecuta `codexctl tui` para abrir un panel de cuentas en vivo controlado por teclado.
-Muestra las ventanas de cuota, los reinicios gratis, las horas de reinicio, la cuenta
+Muestra las ventanas de cuota, el contador de **reinicios gratis**, las horas de reinicio, la cuenta
 activa en Codex y OpenCode, y los errores visibles de API/autenticación sin mostrar
 credenciales. Cada cuenta indica si está activa en **Codex**, **OpenCode**, **ambos** o
 **ninguno**. Usa **↑/↓** para seleccionar, **Enter** o **s** para activar en Codex,
 **a** para reautenticar, **r** para actualizar y **q** o **Esc** para salir.
 Las cuotas también se actualizan automáticamente cada 5 minutos; las actualizaciones
 automáticas no se superponen con una actualización en curso e informan su inicio y
-finalización en la línea de estado. En terminales estrechas se usa una vista compacta.
+finalización en la línea de estado. Los colores distinguen selección, destinos activos,
+carga y errores; en terminales estrechas se usa una vista compacta.
 
 ### 🇬🇧 CLI
 
@@ -159,7 +170,15 @@ codexctl rename <id> "new name"  # Rename account
 codexctl remove <id>       # Remove account
 codexctl refresh           # Force token refresh
 codexctl status            # Show active account
+codexctl tui               # Open the interactive terminal interface
+codexctl reauth <account>  # Reauthenticate an account
 ```
+
+`codexctl tui` shows quota windows, the free-reset counter, and whether each account
+is active in Codex, OpenCode, both, or neither. Use **↑/↓**, **Enter** or **s**, **a**,
+**r**, and **q**/**Esc** for navigation, switching, reauthentication, refresh, and exit.
+It refreshes automatically every five minutes and uses colors for selection, destinations,
+loading, and errors.
 
 ### 🇧🇷 CLI
 
@@ -171,7 +190,14 @@ codexctl rename <id> "novo nome"  # Renomear
 codexctl remove <id>       # Remover conta
 codexctl refresh           # Forçar atualização de tokens
 codexctl status            # Ver conta ativa
+codexctl tui               # Abrir a interface interativa de terminal
+codexctl reauth <account>  # Reautenticar uma conta
 ```
+
+`codexctl tui` mostra as janelas de cota, o contador de reinícios grátis e se cada conta
+está ativa no Codex, OpenCode, em ambos ou em nenhum. Use **↑/↓**, **Enter** ou **s**, **a**,
+**r** e **q**/**Esc** para navegar, trocar, reautenticar, atualizar e sair. A atualização
+automática ocorre a cada cinco minutos, com cores para seleção, destinos, carregamento e erros.
 
 ### 🖥️ App de escritorio / Desktop app / App desktop
 
