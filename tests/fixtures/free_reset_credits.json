@@ -1,0 +1,6 @@
+{
+  "rate_limit_reset_credits": {
+    "available_count": 5,
+    "applicable_available_count": 3
+  }
+}

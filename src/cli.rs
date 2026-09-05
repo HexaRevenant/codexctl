@@ -1,9 +1,10 @@
-use chrono::{DateTime, Utc, Datelike};
+use chrono::{DateTime, Datelike, Utc};
 use clap::{Parser, Subcommand};
 
 use crate::api;
 use crate::manager;
 use crate::models::{Account, QuotaSnapshot, UsageWindow};
+use crate::tui;
 
 const MONTHS: &[&str] = &[
     "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
@@ -11,7 +12,11 @@ const MONTHS: &[&str] = &[
 const DAYS: &[&str] = &["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
 
 #[derive(Parser)]
-#[command(name = "codexctl", version, about = "Multi-account quota tracker para OpenAI Codex")]
+#[command(
+    name = "codexctl",
+    version,
+    about = "Multi-account quota tracker para OpenAI Codex"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -19,15 +24,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Abrir la interfaz interactiva de terminal
+    Tui,
     /// Mostrar todas las cuentas con quota
     List {
         #[arg(long, help = "Sin fetch de quota (más rápido)")]
         no_quota: bool,
     },
     /// Agregar nueva cuenta (abre el browser)
-    Add {
-        nickname: String,
-    },
+    Add { nickname: String },
     /// Cambiar la cuenta activa (destinos: codex, opencode o ambos)
     Switch {
         account: String,
@@ -35,28 +40,19 @@ enum Commands {
         target: String,
     },
     /// Eliminar una cuenta
-    Remove {
-        account: String,
-    },
+    Remove { account: String },
     /// Renombrar una cuenta
-    Rename {
-        account: String,
-        nickname: String,
-    },
+    Rename { account: String, nickname: String },
     /// Forzar refresh de tokens
-    Refresh {
-        account: Option<String>,
-    },
+    Refresh { account: Option<String> },
+    /// Reautenticar una cuenta existente (abre el browser)
+    Reauth { account: String },
     /// Mostrar la cuenta activa
     Status,
     /// Mostrar quota de una o todas
-    Quota {
-        account: Option<String>,
-    },
+    Quota { account: Option<String> },
     /// Cambiar la cuenta de OpenAI usada por OpenCode
-    OpencodeSwitch {
-        account: String,
-    },
+    OpencodeSwitch { account: String },
     /// Ver qué cuenta usa OpenCode y cuándo expira
     OpencodeStatus,
 }
@@ -66,12 +62,14 @@ pub async fn run() -> anyhow::Result<()> {
     let client = reqwest::Client::new();
 
     match cli.command {
+        Commands::Tui => tui::run().await,
         Commands::List { no_quota } => cmd_list(&client, no_quota).await,
         Commands::Add { nickname } => cmd_add(&nickname),
         Commands::Switch { account, target } => cmd_switch(&client, &account, &target).await,
         Commands::Remove { account } => cmd_remove(&account),
         Commands::Rename { account, nickname } => cmd_rename(&account, &nickname),
         Commands::Refresh { account } => cmd_refresh(&client, account.as_deref()).await,
+        Commands::Reauth { account } => cmd_reauth(&account),
         Commands::Status => cmd_status(),
         Commands::Quota { account } => cmd_quota(&client, account.as_deref()).await,
         Commands::OpencodeSwitch { account } => cmd_opencode_switch(&client, &account).await,
@@ -96,15 +94,30 @@ fn cmd_opencode_status() -> anyhow::Result<()> {
     println!("  accountId: {}", info.account_id);
     if let Some(exp) = info.expires_at {
         let exp_dt = chrono::DateTime::from_timestamp_millis(exp)
-            .map(|d| d.with_timezone(&chrono::Local).format("%d %b %Y %H:%M").to_string())
+            .map(|d| {
+                d.with_timezone(&chrono::Local)
+                    .format("%d %b %Y %H:%M")
+                    .to_string()
+            })
             .unwrap_or_else(|| "?".into());
         println!("  expira:    {exp_dt}");
     } else {
         println!("  expira:    ?");
     }
-    println!("  refresh:   {}", if info.has_refresh { "✅ sí" } else { "❌ no" });
+    println!(
+        "  refresh:   {}",
+        if info.has_refresh {
+            "✅ sí"
+        } else {
+            "❌ no"
+        }
+    );
     if let Some(acct) = &info.matched_account {
-        println!("  cuenta:    \"{}\" ({})", acct.nickname, acct.email.as_deref().unwrap_or("?"));
+        println!(
+            "  cuenta:    \"{}\" ({})",
+            acct.nickname,
+            acct.email.as_deref().unwrap_or("?")
+        );
     } else {
         println!("  cuenta:    no coincide con ninguna registrada en codexctl");
     }
@@ -142,21 +155,37 @@ fn cmd_add(nickname: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn cmd_switch(client: &reqwest::Client, account_id: &str, target: &str) -> anyhow::Result<()> {
+async fn cmd_switch(
+    client: &reqwest::Client,
+    account_id: &str,
+    target: &str,
+) -> anyhow::Result<()> {
     match target {
         "codex" => {
             let acct = manager::switch(account_id)?;
-            println!("✅ Activada en Codex: \"{}\" (ID: {})", acct.nickname, acct.id);
+            println!(
+                "✅ Activada en Codex: \"{}\" (ID: {})",
+                acct.nickname, acct.id
+            );
         }
         "opencode" => {
             let acct = manager::opencode_switch(client, account_id).await?;
-            println!("✅ Activada en OpenCode: \"{}\" (ID: {})", acct.nickname, acct.id);
+            println!(
+                "✅ Activada en OpenCode: \"{}\" (ID: {})",
+                acct.nickname, acct.id
+            );
         }
         "both" => {
             let acct = manager::switch(account_id)?;
-            println!("✅ Activada en Codex: \"{}\" (ID: {})", acct.nickname, acct.id);
+            println!(
+                "✅ Activada en Codex: \"{}\" (ID: {})",
+                acct.nickname, acct.id
+            );
             let acct2 = manager::opencode_switch(client, account_id).await?;
-            println!("✅ Activada en OpenCode: \"{}\" (ID: {})", acct2.nickname, acct2.id);
+            println!(
+                "✅ Activada en OpenCode: \"{}\" (ID: {})",
+                acct2.nickname, acct2.id
+            );
         }
         other => anyhow::bail!("target inválido: {other} (usá codex, opencode o both)"),
     }
@@ -165,7 +194,11 @@ async fn cmd_switch(client: &reqwest::Client, account_id: &str, target: &str) ->
 
 fn cmd_remove(account_id: &str) -> anyhow::Result<()> {
     let accounts = manager::load()?;
-    let nick = accounts.iter().find(|a| a.id == account_id || a.nickname == account_id).map(|a| a.nickname.as_str()).unwrap_or(account_id);
+    let nick = accounts
+        .iter()
+        .find(|a| a.id == account_id || a.nickname == account_id)
+        .map(|a| a.nickname.as_str())
+        .unwrap_or(account_id);
     manager::remove(account_id)?;
     println!("✅ Eliminada: \"{nick}\"");
     Ok(())
@@ -174,6 +207,13 @@ fn cmd_remove(account_id: &str) -> anyhow::Result<()> {
 fn cmd_rename(account_id: &str, new_nickname: &str) -> anyhow::Result<()> {
     manager::rename(account_id, new_nickname)?;
     println!("✅ Renombrada a \"{new_nickname}\"");
+    Ok(())
+}
+
+fn cmd_reauth(account_id: &str) -> anyhow::Result<()> {
+    eprintln!("→ Reautenticando la cuenta \"{account_id}\"; se abrirá el browser...");
+    let acct = manager::reauth(account_id)?;
+    println!("✅ Reautenticada: \"{}\" (ID: {})", acct.nickname, acct.id);
     Ok(())
 }
 
@@ -238,7 +278,10 @@ async fn cmd_quota(client: &reqwest::Client, account_id: Option<&str>) -> anyhow
 
 // ── Fetch ───────────────────────────────────────────────────────────
 
-async fn fetch_all(client: &reqwest::Client, accounts: &[Account]) -> std::collections::HashMap<String, QuotaSnapshot> {
+async fn fetch_all(
+    client: &reqwest::Client,
+    accounts: &[Account],
+) -> std::collections::HashMap<String, QuotaSnapshot> {
     let mut map = std::collections::HashMap::new();
     for acct in accounts {
         map.insert(acct.id.clone(), fetch_one(client, acct).await);
@@ -246,7 +289,10 @@ async fn fetch_all(client: &reqwest::Client, accounts: &[Account]) -> std::colle
     map
 }
 
-async fn fetch_all_selected(client: &reqwest::Client, targets: &[&Account]) -> std::collections::HashMap<String, QuotaSnapshot> {
+async fn fetch_all_selected(
+    client: &reqwest::Client,
+    targets: &[&Account],
+) -> std::collections::HashMap<String, QuotaSnapshot> {
     let mut map = std::collections::HashMap::new();
     for acct in targets {
         map.insert(acct.id.clone(), fetch_one(client, acct).await);
@@ -280,7 +326,9 @@ async fn fetch_one(client: &reqwest::Client, acct: &Account) -> QuotaSnapshot {
             match api::force_refresh(client, &creds).await {
                 Ok(refreshed) => {
                     crate::auth::save(&refreshed, &auth_path).ok();
-                    api::fetch_quota(client, &refreshed).await.unwrap_or_else(|e| error_snapshot(&e.to_string()))
+                    api::fetch_quota(client, &refreshed)
+                        .await
+                        .unwrap_or_else(|e| error_snapshot(&e.to_string()))
                 }
                 Err(e) => error_snapshot(&e.to_string()),
             }
@@ -298,6 +346,8 @@ fn error_snapshot(_msg: &str) -> QuotaSnapshot {
         secondary_window: None,
         credits_balance: None,
         credits_unlimited: None,
+        rate_limit_reset_credits: None,
+        additional_rate_limits: Vec::new(),
     }
 }
 
@@ -314,8 +364,20 @@ fn print_accounts(
 
     let targets = manager::active_targets(accounts);
 
-    let hdr = row(&["ID", "Cuenta", "Email", "Plan", "5h%", "Disp.5h", "7d%", "Disp.7d", "Reinicio", "Activo en"]);
-    let sep = row(&["-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
+    let hdr = row(&[
+        "ID",
+        "Cuenta",
+        "Email",
+        "Plan",
+        "5h%",
+        "Disp.5h",
+        "7d%",
+        "Disp.7d",
+        "Reinicio",
+        "Reinicios",
+        "Activo en",
+    ]);
+    let sep = row(&["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]);
     println!("{hdr}");
     println!("{sep}");
 
@@ -327,7 +389,10 @@ fn print_accounts(
     }
 
     if let Some(quotas) = quotas {
-        let ok = quotas.values().filter(|s| s.allowed.unwrap_or(false)).count();
+        let ok = quotas
+            .values()
+            .filter(|s| s.allowed.unwrap_or(false))
+            .count();
         let total = quotas.len();
         println!();
         println!("📊 {ok}/{total} cuentas con quota activa");
@@ -343,10 +408,16 @@ fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, where_active: &str)
     };
     match snap {
         None => row(&[
-            &acct.id, &acct.nickname,
+            &acct.id,
+            &acct.nickname,
             acct.email.as_deref().unwrap_or("?"),
             acct.plan_type.as_deref().unwrap_or("?"),
-            "—", "—", "—", "—", "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
+            "—",
             label,
         ]),
         Some(s) => {
@@ -358,18 +429,29 @@ fn account_row(acct: &Account, snap: Option<&QuotaSnapshot>, where_active: &str)
                 .or(s.primary_window.as_ref())
                 .and_then(|w| w.reset_at);
             let reset_str = format_fecha(reset);
+            let free_reset_credits = format_free_reset_credits(&s.rate_limit_reset_credits);
             row(&[
-                &acct.id, &acct.nickname,
+                &acct.id,
+                &acct.nickname,
                 s.email.as_deref().or(acct.email.as_deref()).unwrap_or("?"),
-                s.plan_type.as_deref().or(acct.plan_type.as_deref()).unwrap_or("?"),
-                &p5, &d5, &p7, &d7, &reset_str, label,
+                s.plan_type
+                    .as_deref()
+                    .or(acct.plan_type.as_deref())
+                    .unwrap_or("?"),
+                &p5,
+                &d5,
+                &p7,
+                &d7,
+                &reset_str,
+                &free_reset_credits,
+                label,
             ])
         }
     }
 }
 
 fn row(cols: &[&str]) -> String {
-    let widths = [8usize, 22, 34, 8, 8, 9, 8, 9, 20, 7];
+    let widths = [8usize, 22, 34, 8, 8, 9, 8, 9, 20, 17, 7];
     cols.iter()
         .enumerate()
         .map(|(i, c)| {
@@ -382,6 +464,16 @@ fn row(cols: &[&str]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn format_free_reset_credits(credits: &Option<crate::models::FreeResetCredits>) -> String {
+    match credits {
+        Some(credits) => format!(
+            "{}/{}",
+            credits.applicable_available_count, credits.available_count
+        ),
+        None => "—".to_string(),
+    }
 }
 
 fn format_quota(w: &Option<UsageWindow>) -> (String, String) {
@@ -410,11 +502,43 @@ fn format_fecha(dt: Option<DateTime<Utc>>) -> String {
                 format!("mañana {}", local.format("%H:%M"))
             } else if local.year() == now.year() {
                 let dow = DAYS[local.weekday().num_days_from_monday() as usize];
-                format!("{dow} {:02} {} {}", local.day(), MONTHS[(local.month0()) as usize], local.format("%H:%M"))
+                format!(
+                    "{dow} {:02} {} {}",
+                    local.day(),
+                    MONTHS[(local.month0()) as usize],
+                    local.format("%H:%M")
+                )
             } else {
                 let dow = DAYS[local.weekday().num_days_from_monday() as usize];
-                format!("{dow} {:02} {} {} {}", local.day(), MONTHS[(local.month0()) as usize], local.year(), local.format("%H:%M"))
+                format!(
+                    "{dow} {:02} {} {} {}",
+                    local.day(),
+                    MONTHS[(local.month0()) as usize],
+                    local.year(),
+                    local.format("%H:%M")
+                )
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_free_reset_credits;
+    use crate::models::FreeResetCredits;
+
+    #[test]
+    fn formats_applicable_and_available_free_reset_credits() {
+        let credits = Some(FreeResetCredits {
+            available_count: 5,
+            applicable_available_count: 3,
+        });
+
+        assert_eq!(format_free_reset_credits(&credits), "3/5");
+    }
+
+    #[test]
+    fn formats_absent_free_reset_credits_as_dash() {
+        assert_eq!(format_free_reset_credits(&None), "—");
     }
 }

@@ -68,6 +68,17 @@ async function addAccount() {
   }
 }
 
+async function reauthAccount(id) {
+  showToast("⏳ Abriendo navegador para reautenticación...");
+  try {
+    const msg = await invoke("reauth_account", { accountId: id });
+    showToast(msg);
+    await refreshAll();
+  } catch (e) {
+    showToast("Error: " + e, true);
+  }
+}
+
 async function renameAccount(id) {
   const newName = prompt("Nuevo nombre:");
   if (!newName || !newName.trim()) return;
@@ -110,7 +121,7 @@ function renderTable(accounts, status) {
     const q7class = quotaClass(acct.quota_7d);
 
     tr.innerHTML = `
-      <td><strong>${esc(acct.nickname)}</strong> ${acct.is_active ? '<span class="active-indicator">●</span>' : ''}</td>
+      <td><strong>${esc(acct.nickname)}</strong> ${acct.is_active ? '<span class="active-indicator">●</span>' : ''}${acct.quota_error ? `<span class="quota-error">${esc(acct.quota_error)}</span>` : ''}</td>
       <td style="color:var(--text2)">${esc(acct.email)}</td>
       <td><span class="tag tag-${acct.plan_type}">${esc(acct.plan_type)}</span></td>
       <td class="${q5class}">${esc(acct.quota_5h)}</td>
@@ -118,6 +129,7 @@ function renderTable(accounts, status) {
       <td style="color:var(--text2);font-size:0.85em">${esc(acct.reset_at)}</td>
       <td class="actions">
         <button onclick="switchAccount('${acct.id}')">Activar</button>
+        <button onclick="reauthAccount('${esc(acct.id)}')">Reautenticar</button>
         <button onclick="renameAccount('${acct.id}')">✎</button>
         <button class="danger" onclick="removeAccount('${acct.id}','${esc(acct.nickname)}')">✕</button>
       </td>

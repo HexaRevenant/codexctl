@@ -113,8 +113,14 @@ pub fn save(creds: &AuthCredentials, path: &Path) -> Result<()> {
     };
 
     let mut tokens = serde_json::Map::new();
-    tokens.insert("access_token".into(), Value::String(creds.access_token.clone()));
-    tokens.insert("refresh_token".into(), Value::String(creds.refresh_token.clone()));
+    tokens.insert(
+        "access_token".into(),
+        Value::String(creds.access_token.clone()),
+    );
+    tokens.insert(
+        "refresh_token".into(),
+        Value::String(creds.refresh_token.clone()),
+    );
     if let Some(id) = &creds.id_token {
         tokens.insert("id_token".into(), Value::String(id.clone()));
     }
@@ -124,9 +130,7 @@ pub fn save(creds: &AuthCredentials, path: &Path) -> Result<()> {
 
     raw["auth_mode"] = Value::String("chatgpt".into());
     raw["tokens"] = Value::Object(tokens);
-    raw["last_refresh"] = Value::String(
-        Utc::now().format("%Y-%m-%dT%H:%M:%S%.fZ").to_string(),
-    );
+    raw["last_refresh"] = Value::String(Utc::now().format("%Y-%m-%dT%H:%M:%S%.fZ").to_string());
     raw.as_object_mut().map(|o| o.remove("OPENAI_API_KEY"));
 
     let text = serde_json::to_string_pretty(&raw)?;

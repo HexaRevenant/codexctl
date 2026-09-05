@@ -3,3 +3,8 @@ src-tauri/target/
 *.swp
 *.swo
 .DS_Store
+# Local AI runtime state
+.atl/
+# Tauri sidecars are built for the current target immediately before packaging.
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep

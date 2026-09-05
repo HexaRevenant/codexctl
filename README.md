@@ -134,7 +134,20 @@ codexctl rename <id> "nuevo nombre"  # Renombrar
 codexctl remove <id>       # Eliminar cuenta
 codexctl refresh           # Forzar refresh de tokens
 codexctl status            # Ver cuenta activa
+codexctl tui               # Abrir la interfaz interactiva de terminal
 ```
+
+#### Terminal TUI
+
+Ejecuta `codexctl tui` para abrir un panel de cuentas en vivo controlado por teclado.
+Muestra las ventanas de cuota, los reinicios gratis, las horas de reinicio, la cuenta
+activa en Codex y OpenCode, y los errores visibles de API/autenticación sin mostrar
+credenciales. Cada cuenta indica si está activa en **Codex**, **OpenCode**, **ambos** o
+**ninguno**. Usa **↑/↓** para seleccionar, **Enter** o **s** para activar en Codex,
+**a** para reautenticar, **r** para actualizar y **q** o **Esc** para salir.
+Las cuotas también se actualizan automáticamente cada 5 minutos; las actualizaciones
+automáticas no se superponen con una actualización en curso e informan su inicio y
+finalización en la línea de estado. En terminales estrechas se usa una vista compacta.
 
 ### 🇬🇧 CLI
 
@@ -228,9 +241,44 @@ cargo build --release
 ./target/release/codexctl list
 
 # App de escritorio (requiere GTK, WebKit, etc.)
-cd src-tauri
+./scripts/prepare-sidecar.sh
 PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig cargo tauri build
 ```
+
+### Desktop packages with the CLI included
+
+The Tauri packages contain both executables. The CLI is prepared as a
+target-specific sidecar before packaging; do not copy a binary from another
+operating system or architecture.
+
+```bash
+# Linux, macOS, or another Unix-like host (run from the repository root)
+./scripts/prepare-sidecar.sh
+(cd src-tauri && cargo tauri build)
+```
+
+```powershell
+# Windows PowerShell (run from the repository root)
+.\scripts\prepare-sidecar.ps1
+Push-Location src-tauri; cargo tauri build; Pop-Location
+```
+
+For a specific installed Rust target, pass it to the preparation script (for
+example `./scripts/prepare-sidecar.sh x86_64-unknown-linux-gnu`). The target
+must have a Rust toolchain and the required Tauri system dependencies installed;
+this project does not claim cross-compilation by itself.
+
+| Package | CLI location and use |
+| --- | --- |
+| Linux DEB/RPM | Installed as `/usr/bin/codexctl`; run `codexctl list`. The GUI remains `codexctl-tauri`. |
+| Linux AppImage | Both files are inside the AppImage. Run the GUI with `./codexctl_*.AppImage`; for the CLI, extract with `./codexctl_*.AppImage --appimage-extract` and run `./squashfs-root/usr/bin/codexctl list`. |
+| macOS app/DMG | The CLI is beside the GUI at `codexctl-tauri.app/Contents/MacOS/codexctl`. Run it there, or install a user command with `mkdir -p "$HOME/.local/bin" && ln -sf "/Applications/codexctl-tauri.app/Contents/MacOS/codexctl" "$HOME/.local/bin/codexctl"`; then run `codexctl list`. |
+| Windows MSI/NSIS | Both executables are installed in the application directory. Run `codexctl.exe list` from that directory, or add the directory to `PATH`; the GUI launcher is unchanged. |
+
+Tauri strips the target triple from the installed sidecar name. The source file
+therefore must be named `src-tauri/binaries/codexctl-<target-triple>` (with
+`.exe` on Windows). Generated sidecars are ignored by Git and must be rebuilt
+when changing host or target.
 
 ---
 

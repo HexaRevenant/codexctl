@@ -50,9 +50,18 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2"
 
+      - name: Prepare CLI sidecar (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: ./scripts/prepare-sidecar.sh "${{ matrix.target }}"
+
+      - name: Prepare CLI sidecar (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: ./scripts/prepare-sidecar.ps1 "${{ matrix.target }}"
+
       - name: Build (Linux)
         if: matrix.platform == 'ubuntu-latest'
-        run: cargo tauri build
+        run: cargo tauri build --target ${{ matrix.target }}
         working-directory: ${{ github.workspace }}
         env:
           PKG_CONFIG_PATH: ${{ matrix.pkg-config }}
@@ -60,7 +69,7 @@ jobs:
 
       - name: Build (macOS / Windows)
         if: matrix.platform != 'ubuntu-latest'
-        run: cargo tauri build
+        run: cargo tauri build --target ${{ matrix.target }}
         working-directory: ${{ github.workspace }}
 
       - name: Upload artifacts

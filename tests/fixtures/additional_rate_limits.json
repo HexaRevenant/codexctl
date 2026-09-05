@@ -1,0 +1,32 @@
+{
+  "plan_type": "plus",
+  "rate_limit": {
+    "allowed": true,
+    "limit_reached": false,
+    "primary_window": {
+      "used_percent": 12,
+      "limit_window_seconds": 18000,
+      "reset_at": 1700000000
+    },
+    "secondary_window": {
+      "used_percent": 34,
+      "limit_window_seconds": 604800,
+      "reset_at": 1700604800
+    }
+  },
+  "additional_rate_limits": [
+    {
+      "limit_name": "reviews",
+      "metered_feature": "codex_reviews",
+      "rate_limit": {
+        "used_percent": 50,
+        "reset_after_seconds": 3600,
+        "reset_at": 1700003600
+      }
+    },
+    {
+      "limit_name": "unmetered_example",
+      "metered_feature": "example_feature"
+    }
+  ]
+}

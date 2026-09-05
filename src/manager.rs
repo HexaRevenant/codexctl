@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::Utc;
-use std::path::PathBuf;
 use std::fs;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::models::Account;
@@ -110,6 +110,73 @@ pub fn add(nickname: &str) -> Result<Account> {
     save(&all)?;
 
     Ok(acct)
+}
+
+/// Re-authenticate an existing account without changing its local identity.
+pub fn reauth(account_id: &str) -> Result<Account> {
+    let mut all = load()?;
+    let idx = find_index(&all, account_id)
+        .ok_or_else(|| anyhow::anyhow!("Cuenta '{}' no encontrada", account_id))?;
+    let original = all[idx].clone();
+    let home_dir = homes_dir().join(&original.uuid);
+    let auth_path = home_dir.join("auth.json");
+    let backup_path = home_dir.join(format!("auth.json.reauth-{}.bak", Uuid::new_v4()));
+
+    if auth_path.exists() {
+        fs::rename(&auth_path, &backup_path)?;
+    }
+
+    let result = (|| -> Result<Account> {
+        let binary = which_codex().context("codex binary no encontrado en PATH")?;
+        let status = std::process::Command::new(binary)
+            .arg("login")
+            .env("CODEX_HOME", &home_dir)
+            .status()
+            .context("fallo al ejecutar codex login")?;
+        if !status.success() {
+            anyhow::bail!("codex login falló (exit {})", status.code().unwrap_or(-1));
+        }
+        if !auth_path.exists() {
+            anyhow::bail!("codex login completado pero no se creó auth.json");
+        }
+
+        let creds =
+            crate::auth::load(&auth_path).context("codex login produjo un auth.json inválido")?;
+        let updated = account_with_reauth(&original, creds);
+
+        all[idx] = updated.clone();
+        write_meta(&updated)?;
+        save(&all)?;
+        Ok(updated)
+    })();
+
+    match result {
+        Ok(updated) => {
+            fs::remove_file(&backup_path).ok();
+            Ok(updated)
+        }
+        Err(error) => {
+            restore_auth(&auth_path, &backup_path);
+            Err(error)
+        }
+    }
+}
+
+fn account_with_reauth(original: &Account, creds: crate::models::AuthCredentials) -> Account {
+    let mut updated = original.clone();
+    updated.email = creds.email;
+    updated.plan_type = creds.plan_type;
+    updated.provider_account_id = creds.account_id;
+    updated.user_id = creds.user_id;
+    updated.updated_at = Utc::now().to_rfc3339();
+    updated
+}
+
+fn restore_auth(auth_path: &std::path::Path, backup_path: &std::path::Path) {
+    fs::remove_file(auth_path).ok();
+    if backup_path.exists() {
+        fs::rename(backup_path, auth_path).ok();
+    }
 }
 
 /// Remove a managed account.
@@ -266,7 +333,8 @@ pub fn opencode_status() -> Result<OpencodeInfo> {
 
     Ok(OpencodeInfo {
         account_id,
-        expires_at,        has_refresh,
+        expires_at,
+        has_refresh,
         matched_account: matched,
     })
 }
@@ -276,7 +344,9 @@ fn jwt_exp_ms(token: &str) -> Option<i64> {
     let part = token.split('.').nth(1)?;
     let padded = format!("{}{}", part, "=".repeat((4 - part.len() % 4) % 4));
     use base64::Engine;
-    let bytes = base64::engine::general_purpose::URL_SAFE.decode(padded.as_bytes()).ok()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(padded.as_bytes())
+        .ok()?;
     let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     value.get("exp")?.as_i64().map(|s| s * 1000)
 }
@@ -315,7 +385,13 @@ pub fn active_targets(accounts: &[Account]) -> std::collections::HashMap<String,
             let acct_auth = homes_dir().join(&acct.uuid).join("auth.json");
             if let Ok(bytes) = fs::read(&acct_auth) {
                 if bytes == ambient_bytes {
-                    map.entry(acct.id.clone()).and_modify(|v| *v = if v.is_empty() { "codex".into() } else { "both".into() });
+                    map.entry(acct.id.clone()).and_modify(|v| {
+                        *v = if v.is_empty() {
+                            "codex".into()
+                        } else {
+                            "both".into()
+                        }
+                    });
                 }
             }
         }
@@ -325,9 +401,7 @@ pub fn active_targets(accounts: &[Account]) -> std::collections::HashMap<String,
     // equals the one OpenCode holds). Falls back to user_id, then accountId.
     let oc_access = opencode_access_token();
     let oc_user_id = opencode_access_user_id();
-    let oc_id = opencode_status()
-        .map(|i| i.account_id)
-        .unwrap_or_default();
+    let oc_id = opencode_status().map(|i| i.account_id).unwrap_or_default();
 
     for acct in accounts {
         let acct_uid = acct.user_id.clone().or_else(|| {
@@ -338,7 +412,9 @@ pub fn active_targets(accounts: &[Account]) -> std::collections::HashMap<String,
         let matches = if let Some(oc_tok) = &oc_access {
             // Exact: same access token → same home
             let acct_auth_path = homes_dir().join(&acct.uuid).join("auth.json");
-            let acct_tok = crate::auth::load(&acct_auth_path).ok().map(|c| c.access_token);
+            let acct_tok = crate::auth::load(&acct_auth_path)
+                .ok()
+                .map(|c| c.access_token);
             acct_tok.as_deref() == Some(oc_tok.as_str())
         } else if let Some(uid) = &oc_user_id {
             acct_uid.as_deref() == Some(uid.as_str())
@@ -347,7 +423,13 @@ pub fn active_targets(accounts: &[Account]) -> std::collections::HashMap<String,
         };
 
         if matches {
-            map.entry(acct.id.clone()).and_modify(|v| *v = if v.is_empty() { "opencode".into() } else { "both".into() });
+            map.entry(acct.id.clone()).and_modify(|v| {
+                *v = if v.is_empty() {
+                    "opencode".into()
+                } else {
+                    "both".into()
+                }
+            });
         }
     }
 
@@ -361,7 +443,11 @@ fn opencode_access_token() -> Option<String> {
         return None;
     }
     let store: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
-    store.get("openai")?.get("access")?.as_str().map(String::from)
+    store
+        .get("openai")?
+        .get("access")?
+        .as_str()
+        .map(String::from)
 }
 
 /// Decode the user_id (chatgpt_user_id) from the access token that
@@ -376,7 +462,9 @@ fn opencode_access_user_id() -> Option<String> {
     let part = access.split('.').nth(1)?;
     let padded = format!("{}{}", part, "=".repeat((4 - part.len() % 4) % 4));
     use base64::Engine;
-    let bytes = base64::engine::general_purpose::URL_SAFE.decode(padded.as_bytes()).ok()?;
+    let bytes = base64::engine::general_purpose::URL_SAFE
+        .decode(padded.as_bytes())
+        .ok()?;
     let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     let auth = value.get("https://api.openai.com/auth")?;
     auth.get("chatgpt_user_id")?.as_str().map(String::from)
@@ -387,18 +475,60 @@ fn opencode_access_user_id() -> Option<String> {
 fn which_codex() -> Option<PathBuf> {
     // On Windows the binary is codex.exe; on Unix it's codex
     let exe = if cfg!(windows) { "codex.exe" } else { "codex" };
-    std::env::var_os("PATH")
-        .as_ref()
-        .and_then(|path| {
-            std::env::split_paths(path).find_map(|dir| {
-                let candidate = dir.join(exe);
-                if candidate.is_file() {
-                    Some(candidate)
-                } else {
-                    None
-                }
-            })
+    find_codex(std::env::var_os("PATH"), dirs::home_dir(), exe)
+}
+
+fn find_codex(
+    path: Option<std::ffi::OsString>,
+    home: Option<PathBuf>,
+    exe: &str,
+) -> Option<PathBuf> {
+    let mut candidates = path
+        .into_iter()
+        .flat_map(|value| {
+            std::env::split_paths(&value)
+                .map(|dir| dir.join(exe))
+                .collect::<Vec<_>>()
         })
+        .collect::<Vec<_>>();
+
+    if let Some(home) = home {
+        candidates.extend([
+            home.join(".local/bin").join(exe),
+            home.join(".cargo/bin").join(exe),
+            home.join(".npm-global/bin").join(exe),
+            home.join(".bun/bin").join(exe),
+            home.join(".linuxbrew/bin").join(exe),
+        ]);
+    }
+    candidates.extend([
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin").join(exe),
+        PathBuf::from("/usr/local/bin").join(exe),
+        PathBuf::from("/usr/bin").join(exe),
+    ]);
+
+    candidates
+        .into_iter()
+        .find(|candidate| is_executable_file(candidate))
+}
+
+fn is_executable_file(path: &Path) -> bool {
+    let Ok(metadata) = fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
 }
 
 fn count_by_plan_type(plan: &str) -> usize {
@@ -419,17 +549,125 @@ fn write_meta(acct: &Account) -> Result<()> {
         "nickname": acct.nickname,
         "email": acct.email,
         "plan_type": acct.plan_type,
+        "provider_account_id": acct.provider_account_id,
+        "user_id": acct.user_id,
         "created_at": acct.created_at,
         "updated_at": acct.updated_at,
     });
-    fs::write(home.join("meta.json"), serde_json::to_string_pretty(&meta)? + "\n")?;
+    fs::write(
+        home.join("meta.json"),
+        serde_json::to_string_pretty(&meta)? + "\n",
+    )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reauth_preserves_account_identity_fields() {
+        let original = Account {
+            id: "pro-1".into(),
+            nickname: "Personal".into(),
+            uuid: "home-uuid".into(),
+            email: Some("old@example.com".into()),
+            plan_type: Some("plus".into()),
+            provider_account_id: Some("old-provider".into()),
+            user_id: Some("old-user".into()),
+            created_at: "2024-01-01T00:00:00Z".into(),
+            updated_at: "2024-01-02T00:00:00Z".into(),
+        };
+        let updated = account_with_reauth(
+            &original,
+            crate::models::AuthCredentials {
+                access_token: String::new(),
+                refresh_token: String::new(),
+                id_token: None,
+                account_id: Some("new-provider".into()),
+                last_refresh: None,
+                email: Some("new@example.com".into()),
+                name: None,
+                plan_type: Some("team".into()),
+                user_id: Some("new-user".into()),
+            },
+        );
+
+        assert_eq!(updated.id, original.id);
+        assert_eq!(updated.nickname, original.nickname);
+        assert_eq!(updated.uuid, original.uuid);
+        assert_eq!(updated.created_at, original.created_at);
+    }
+
+    #[test]
+    fn failed_reauth_restores_auth_backup() {
+        let dir = std::env::temp_dir().join(format!("codexctl-reauth-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let auth = dir.join("auth.json");
+        let backup = dir.join("auth.json.reauth-test.bak");
+        fs::write(&auth, "old credentials").unwrap();
+        fs::rename(&auth, &backup).unwrap();
+        fs::write(&auth, "partial login output").unwrap();
+
+        restore_auth(&auth, &backup);
+
+        assert_eq!(fs::read_to_string(&auth).unwrap(), "old credentials");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn codex_discovery_uses_user_fallback_when_path_is_empty() {
+        let dir = std::env::temp_dir().join(format!("codexctl-which-{}", Uuid::new_v4()));
+        let bin_dir = dir.join(".local/bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let binary = bin_dir.join("codex");
+        fs::write(&binary, "#!/bin/sh\n").unwrap();
+        make_executable(&binary);
+
+        assert_eq!(
+            find_codex(Some("".into()), Some(dir.clone()), "codex"),
+            Some(binary)
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn codex_discovery_skips_non_executable_path_entry() {
+        let dir = std::env::temp_dir().join(format!("codexctl-which-{}", Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let binary = dir.join("codexctl-test-not-executable");
+        fs::write(&binary, "not executable").unwrap();
+
+        assert_eq!(
+            find_codex(
+                Some(dir.into_os_string()),
+                None,
+                "codexctl-test-not-executable"
+            ),
+            None
+        );
+        fs::remove_dir_all(binary.parent().unwrap()).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn make_executable(path: &Path) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(_path: &Path) {}
 }
 
 pub fn resolve<'a>(accounts: &'a [Account], key: &str) -> Result<&'a Account> {
     find_index(accounts, key)
         .map(|i| &accounts[i])
-        .ok_or_else(|| anyhow::anyhow!("Cuenta '{}' no encontrada. Usá 'list' para ver disponibles.", key))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Cuenta '{}' no encontrada. Usá 'list' para ver disponibles.",
+                key
+            )
+        })
 }
 
 fn find_index(accounts: &[Account], key: &str) -> Option<usize> {

@@ -37,7 +37,8 @@
     padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9em;
   }
   .toolbar button:hover { background: var(--accent); }
-  table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+  .table-scroll { width: 100%; overflow-x: auto; }
+  table { width: 100%; min-width: 1200px; border-collapse: collapse; font-size: 0.9em; }
   th {
     text-align: left; padding: 10px 8px; border-bottom: 2px solid var(--surface2);
     color: var(--text2); font-weight: 600; text-transform: uppercase; font-size: 0.75em;
@@ -69,11 +70,18 @@
   .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); color: var(--text); padding: 12px 20px; border-radius: 8px; border-left: 4px solid var(--green); font-size: 0.9em; opacity: 0; transition: opacity 0.3s; z-index: 200; }
   .toast.show { opacity: 1; }
   .loading { text-align: center; padding: 40px; color: var(--text2); }
+  .error-state { display: none; margin: 20px 0; padding: 16px; border: 1px solid var(--red); border-radius: 8px; color: var(--red); background: rgba(231,76,60,0.1); }
+  .actions button:disabled { opacity: 0.6; cursor: wait; }
+  .actions .reauth-button { background: var(--accent); border-color: var(--accent); color: white; font-weight: 700; }
+  .actions .reauth-button:hover { background: #c7354d; border-color: #c7354d; color: white; }
+  .additional-limits { margin-top: 6px; color: var(--text2); font-size: 0.8em; line-height: 1.5; }
+  .additional-limit { display: block; }
+  .quota-error { display: inline-block; margin-left: 6px; color: var(--red); cursor: help; font-size: 0.9em; }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>⌘ CodexCTL</h1>
+  <h1>⌘ CodexCTL <span id="version" style="font-size:0.55em;color:var(--text2);font-weight:400"></span></h1>
   <div id="activeBadge" class="active-badge">—</div>
 </div>
 <div class="toolbar">
@@ -88,12 +96,15 @@
   </span>
 </div>
 <div id="loading" class="loading">Cargando...</div>
+<div id="errorState" class="error-state" role="alert"></div>
+<div class="table-scroll">
 <table id="accountsTable" style="display:none">
   <thead><tr>
-    <th>Cuenta</th><th>Email</th><th>Plan</th><th>Activo en</th><th>5h%</th><th>Disp.</th><th>7d%</th><th>Disp.</th><th>Reinicio</th><th></th>
+    <th>Cuenta</th><th>Email</th><th>Plan</th><th>Activo en</th><th>5h%</th><th>Disp.</th><th>7d%</th><th>Disp.</th><th>Reinicio</th><th>Reinicios gratis</th><th></th>
   </tr></thead>
   <tbody id="tbody"></tbody>
 </table>
+</div>
 <div class="status-bar" id="statusBar"></div>
 <div class="modal-overlay" id="addModal">
   <div class="modal">
@@ -142,21 +153,48 @@ function startAutoRefresh() {
 
 // ── Init ────────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
+  loadVersion();
   refreshAll();
   startAutoRefresh();
 });
 
-async function refreshAll() {
-  document.getElementById("loading").style.display = "";
-  document.getElementById("accountsTable").style.display = "none";
+async function loadVersion() {
   try {
-    const accounts = await invoke("list_accounts", { fetchQuota: true });
+    const version = await invoke("get_version");
+    document.title = `CodexCTL v${version}`;
+    document.getElementById("version").textContent = `v${version}`;
+  } catch(e) { showToast("Error cargando la versión: " + e, true); }
+}
+
+async function refreshAll() {
+  const errorState = document.getElementById("errorState");
+  document.getElementById("loading").style.display = "";
+  errorState.style.display = "none";
+  try {
+    const accounts = await invoke("list_accounts", { fetchQuota: false });
     const status = await invoke("get_status");
     renderTable(accounts, status);
     updateStatus(accounts, status);
-  } catch(e) { showToast("Error: " + e, true); }
-  document.getElementById("loading").style.display = "none";
-  document.getElementById("accountsTable").style.display = "";
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("accountsTable").style.display = "";
+
+    try {
+      const accountsWithQuota = await invoke("list_accounts", { fetchQuota: true });
+      renderTable(accountsWithQuota, status);
+      updateStatus(accountsWithQuota, status);
+    } catch(e) {
+      const message = e?.message || String(e);
+      errorState.textContent = `No se pudieron actualizar las cuotas: ${message}. Las cuentas locales siguen visibles.`;
+      errorState.style.display = "block";
+      showToast("Error actualizando las cuotas", true);
+    }
+  } catch(e) {
+    const message = e?.message || String(e);
+    errorState.textContent = `No se pudieron cargar las cuentas: ${message}`;
+    errorState.style.display = "block";
+    document.getElementById("loading").style.display = "none";
+    showToast("Error cargando las cuentas", true);
+  }
 }
 
 async function switchAccount(id) {
@@ -186,6 +224,35 @@ async function addAccount() {
     const msg = await invoke("add_account", { nickname });
     showToast(msg); await refreshAll();
   } catch(e) { showToast("Error: " + e, true); }
+}
+
+async function reauthAccount(accountOrButton, button) {
+  const clickedButton = accountOrButton instanceof HTMLElement
+    ? accountOrButton
+    : button || document.querySelector(`.reauth-button[data-account-id="${CSS.escape(String(accountOrButton))}"]`);
+  const id = clickedButton?.dataset.accountId || String(accountOrButton);
+  const errorState = document.getElementById("errorState");
+  errorState.textContent = "Reautenticando cuenta... Se abrirá el navegador para iniciar sesión.";
+  errorState.style.display = "block";
+  if (clickedButton) {
+    clickedButton.disabled = true;
+    clickedButton.textContent = "Reautenticando...";
+  }
+  try {
+    const msg = await invoke("reauth_account", { accountId: id });
+    showToast(msg);
+    await refreshAll();
+  } catch(e) {
+    const message = e?.message || String(e);
+    errorState.textContent = `No se pudo reautenticar la cuenta: ${message}. Se conservaron las credenciales anteriores.`;
+    errorState.style.display = "block";
+    showToast("Error en la reautenticación", true);
+  } finally {
+    if (clickedButton?.isConnected) {
+      clickedButton.disabled = false;
+      clickedButton.textContent = "Reautenticar";
+    }
+  }
 }
 
 async function renameAccount(id) {
@@ -242,10 +309,14 @@ function renderTable(accounts, status) {
     const tr = document.createElement("tr");
     if (a.is_active) tr.classList.add("active");
     const q5 = quotaClass(a.quota_5h), q7 = quotaClass(a.quota_7d);
+    const freeResets = a.rate_limit_reset_credits;
+    const freeResetText = freeResets
+      ? `${freeResets.applicable_available_count} / ${freeResets.available_count}`
+      : "—";
     const activeIn = a.active_in === "both" ? "Ambos" : a.active_in === "codex" ? "Codex" : a.active_in === "opencode" ? "OpenCode" : "—";
     const activeInClass = a.active_in === "both" ? "tag-team" : a.active_in === "codex" ? "tag-team" : a.active_in === "opencode" ? "tag-free" : "";
     tr.innerHTML = `
-      <td><strong>${esc(a.nickname)}</strong> ${a.is_active ? '<span style="color:var(--green)">●</span>' : ''}</td>
+      <td><strong>${esc(a.nickname)}</strong> ${a.is_active ? '<span style="color:var(--green)">●</span>' : ''}${renderQuotaError(a.quota_error)}${renderAdditionalLimits(a.additional_rate_limits)}</td>
       <td style="color:var(--text2)">${esc(a.email)}</td>
       <td><span class="tag tag-${a.plan_type}">${esc(a.plan_type)}</span></td>
       <td><span class="tag ${activeInClass}">${esc(activeIn)}</span></td>
@@ -254,13 +325,18 @@ function renderTable(accounts, status) {
       <td class="${q7}">${esc(a.quota_7d)}</td>
       <td class="${q7}">${esc(a.disp_7d)}</td>
       <td style="color:var(--text2);font-size:0.85em">${esc(a.reset_at)}</td>
+      <td style="color:var(--text2);font-size:0.85em">${esc(freeResetText)}</td>
       <td class="actions">
         <button onclick="switchAccount('${a.id}')">Activar</button>
+        <button class="reauth-button" data-account-id="${esc(a.id)}">Reautenticar</button>
         <button onclick="renameAccount('${a.id}')">✎</button>
         <button onclick="removeAccount('${a.id}','${esc(a.nickname)}')">✕</button>
       </td>`;
     tbody.appendChild(tr);
   }
+  tbody.querySelectorAll(".reauth-button").forEach(button => {
+    button.addEventListener("click", () => reauthAccount(button.dataset.accountId, button));
+  });
   const badge = document.getElementById("activeBadge");
   badge.textContent = status?.nickname ? `✓ ${status.nickname}` : "❌ Ninguna activa";
 }
@@ -278,6 +354,21 @@ function quotaClass(v) {
   if (n >= 100) return "quota-full";
   if (n >= 80) return "quota-warn";
   return "quota-ok";
+}
+
+function renderAdditionalLimits(limits) {
+  if (!limits?.length) return "";
+  const rows = limits.map(l => {
+    const reset = l.reset_after_seconds == null ? l.reset_at : `${l.reset_after_seconds}s · ${l.reset_at}`;
+    return `<span class="additional-limit">${esc(l.limit_name)} / ${esc(l.metered_feature)}: ${esc(l.used_percent)} · reset ${esc(reset)}</span>`;
+  }).join("");
+  return `<div class="additional-limits">${rows}</div>`;
+}
+
+function renderQuotaError(error) {
+  if (!error) return "";
+  const message = `Quota: ${error}`;
+  return `<span class="quota-error" title="${esc(message)}" aria-label="${esc(message)}">⚠</span>`;
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove("show"); }

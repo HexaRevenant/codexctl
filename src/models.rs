@@ -23,6 +23,27 @@ pub struct UsageWindow {
     pub limit_window_seconds: i64,
 }
 
+/// An additional quota window identified by the backend-provided metadata.
+#[derive(Debug, Clone)]
+pub struct AdditionalRateLimit {
+    pub limit_name: String,
+    pub metered_feature: String,
+    pub window: Option<AdditionalRateLimitWindow>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AdditionalRateLimitWindow {
+    pub used_percent: f64,
+    pub reset_after_seconds: Option<i64>,
+    pub reset_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FreeResetCredits {
+    pub available_count: i64,
+    pub applicable_available_count: i64,
+}
+
 /// Full quota snapshot from OpenAI.
 #[derive(Debug, Clone)]
 pub struct QuotaSnapshot {
@@ -34,6 +55,8 @@ pub struct QuotaSnapshot {
     pub secondary_window: Option<UsageWindow>,
     pub credits_balance: Option<f64>,
     pub credits_unlimited: Option<bool>,
+    pub rate_limit_reset_credits: Option<FreeResetCredits>,
+    pub additional_rate_limits: Vec<AdditionalRateLimit>,
 }
 
 /// A managed account stored locally.
