@@ -6,14 +6,14 @@ description = "Multi-account quota tracker for OpenAI Codex"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
-dirs = "5"
-base64 = "0.22"
+dirs = "7"
+base64 = "0.23"
 anyhow = "1"
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"

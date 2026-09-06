@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "CodexCTL Desktop App"
 authors = ["you"]
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.88"
 
 [lib]
 name = "app_lib"
@@ -22,5 +22,5 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 codexctl = { path = ".." }
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 chrono = "0.4"
