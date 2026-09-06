@@ -132,14 +132,13 @@ async fn cmd_list(client: &reqwest::Client, no_quota: bool) -> anyhow::Result<()
         println!("No hay cuentas. Usá 'codexctl add <nickname>' para agregar una.");
         return Ok(());
     }
-    let act = manager::active(&accounts);
     let quotas = if no_quota {
         None
     } else {
         eprintln!("→ Consultando quota...");
         Some(fetch_all(client, &accounts).await)
     };
-    print_accounts(&accounts, quotas.as_ref(), act.as_ref());
+    print_accounts(&accounts, quotas.as_ref());
     Ok(())
 }
 
@@ -220,8 +219,6 @@ fn cmd_reauth(account_id: &str) -> anyhow::Result<()> {
 async fn cmd_refresh(client: &reqwest::Client, account_id: Option<&str>) -> anyhow::Result<()> {
     eprintln!("→ Refrescando tokens y quota...");
     let accounts = manager::load()?;
-    let act = manager::active(&accounts);
-
     let targets: Vec<&Account> = if let Some(id) = account_id {
         vec![manager::resolve(&accounts, id)?]
     } else {
@@ -229,7 +226,7 @@ async fn cmd_refresh(client: &reqwest::Client, account_id: Option<&str>) -> anyh
     };
 
     let quotas = fetch_all_selected(client, &targets).await;
-    print_accounts(&accounts, Some(&quotas), act.as_ref());
+    print_accounts(&accounts, Some(&quotas));
     Ok(())
 }
 
@@ -261,8 +258,6 @@ async fn cmd_quota(client: &reqwest::Client, account_id: Option<&str>) -> anyhow
         return Ok(());
     }
     eprintln!("→ Consultando quota...");
-    let act = manager::active(&accounts);
-
     let quotas = if let Some(id) = account_id {
         let target = manager::resolve(&accounts, id)?;
         let mut map = std::collections::HashMap::new();
@@ -272,7 +267,7 @@ async fn cmd_quota(client: &reqwest::Client, account_id: Option<&str>) -> anyhow
         fetch_all(client, &accounts).await
     };
 
-    print_accounts(&accounts, Some(&quotas), act.as_ref());
+    print_accounts(&accounts, Some(&quotas));
     Ok(())
 }
 
@@ -356,7 +351,6 @@ fn error_snapshot(_msg: &str) -> QuotaSnapshot {
 fn print_accounts(
     accounts: &[Account],
     quotas: Option<&std::collections::HashMap<String, QuotaSnapshot>>,
-    active: Option<&Account>,
 ) {
     if accounts.is_empty() {
         return;
